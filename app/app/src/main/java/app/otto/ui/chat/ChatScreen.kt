@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -54,7 +53,18 @@ import app.otto.ui.components.ChatCardView
 import app.otto.ui.components.Chip
 import app.otto.ui.components.CircleIconButton
 import app.otto.ui.components.ScreenPadding
-import app.otto.ui.components.StatusLine
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.ui.graphics.graphicsLayer
+import app.otto.ui.components.PillShape
+import app.otto.ui.components.enterAnimation
 import app.otto.ui.components.OttoIcons
 import app.otto.ui.components.OttoMark
 import app.otto.ui.components.rememberHaptic
@@ -99,7 +109,7 @@ fun ChatScreen(onBack: () -> Unit, vm: ChatViewModel = hiltViewModel()) {
             CircleIconButton(OttoIcons.ArrowLeft, "Voltar", onClick = onBack)
             Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Otto", style = OttoType.Title, color = OttoColors.Text, modifier = Modifier.semantics { heading() })
-                StatusLine(state.syncLabel)
+                ModelPill(state.modelLabel)
             }
             Spacer(Modifier.size(48.dp))
         }
@@ -115,8 +125,10 @@ fun ChatScreen(onBack: () -> Unit, vm: ChatViewModel = hiltViewModel()) {
                 contentPadding = PaddingValues(horizontal = ScreenPadding, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.Bottom),
             ) {
-                items(reversed, key = { it.id }) { msg ->
-                    if (msg.fromUser) UserMessage(msg) else OttoMessage(msg, showTyping = msg.streaming && state.typing)
+                itemsIndexed(reversed, key = { _, m -> m.id }) { index, msg ->
+                    // só as duas mais novas entram animadas (o histórico antigo aparece direto)
+                    val modifier = Modifier.animateItem().then(if (index < 2) Modifier.enterAnimation(0, offsetPx = 40f) else Modifier)
+                    if (msg.fromUser) UserMessage(msg, modifier) else OttoMessage(msg, showTyping = msg.streaming && state.typing, modifier = modifier)
                 }
             }
         }
@@ -151,8 +163,8 @@ fun ChatScreen(onBack: () -> Unit, vm: ChatViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun UserMessage(msg: UiMessage) {
-    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+private fun UserMessage(msg: UiMessage, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
         Text(
             msg.text,
             style = OttoType.Body,
@@ -168,9 +180,9 @@ private fun UserMessage(msg: UiMessage) {
 
 /** Resposta do Otto: sem bolha, texto direto no fundo preto. */
 @Composable
-private fun OttoMessage(msg: UiMessage, showTyping: Boolean) {
+private fun OttoMessage(msg: UiMessage, showTyping: Boolean, modifier: Modifier = Modifier) {
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
             .animateContentSize(tween(200))
             .semantics { liveRegion = LiveRegionMode.Polite },
@@ -188,9 +200,33 @@ private fun OttoMessage(msg: UiMessage, showTyping: Boolean) {
             Spacer(Modifier.height(12.dp))
             ChatCardView(card)
         }
-        if (msg.offline && !msg.streaming) {
-            Spacer(Modifier.height(8.dp))
-            Text("Modo offline · resposta por regras, sem IA", style = OttoType.Small, color = OttoColors.Text2)
+    }
+}
+
+/** Modelo em uso, no topo (igual ao rótulo de modelo do Claude): troca com um fade suave. */
+@Composable
+private fun ModelPill(label: String) {
+    AnimatedContent(
+        targetState = label,
+        transitionSpec = { (fadeIn(tween(260)) + slideInVertically(tween(260)) { it / 3 }) togetherWith (fadeOut(tween(160)) + slideOutVertically(tween(160)) { -it / 3 }) },
+        label = "model",
+    ) { text ->
+        if (text.isNotEmpty()) {
+            Row(
+                Modifier
+                    .padding(top = 4.dp)
+                    .clip(PillShape)
+                    .background(OttoColors.Surface)
+                    .border(1.dp, OttoColors.Border2, PillShape)
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(6.dp).clip(CircleShape).background(OttoColors.Text))
+                Spacer(Modifier.width(7.dp))
+                Text(text, style = OttoType.Small, color = OttoColors.Text2, maxLines = 1)
+            }
+        } else {
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
@@ -210,7 +246,13 @@ private fun TypingDots() {
                 animationSpec = infiniteRepeatable(tween(450, delayMillis = i * 150), RepeatMode.Reverse),
                 label = "dot$i",
             )
-            Box(Modifier.size(6.dp).alpha(a).clip(CircleShape).background(OttoColors.Text))
+            val lift by t.animateFloat(
+                initialValue = 0f,
+                targetValue = -5f,
+                animationSpec = infiniteRepeatable(tween(450, delayMillis = i * 150), RepeatMode.Reverse),
+                label = "lift$i",
+            )
+            Box(Modifier.size(7.dp).graphicsLayer { translationY = lift.dp.toPx() }.alpha(a).clip(CircleShape).background(OttoColors.Text))
         }
     }
 }

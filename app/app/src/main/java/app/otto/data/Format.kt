@@ -82,3 +82,15 @@ object Dates {
         }
     }
 }
+
+/** "openai/gpt-oss-120b" -> "GPT-OSS 120B"; "gemini-3.8-flash" -> "Gemini 3.8 Flash". */
+fun friendlyModelName(raw: String): String {
+    val id = raw.substringAfterLast('/')
+    return id.split('-', '_').filter { it.isNotBlank() }.joinToString(" ") { t ->
+        when {
+            t.equals("gpt", true) || t.equals("oss", true) -> t.uppercase()
+            t.matches(Regex("""\d+[a-zA-Z]""")) -> t.uppercase()
+            else -> t.replaceFirstChar { it.uppercase() }
+        }
+    }.replace("GPT OSS", "GPT-OSS")
+}

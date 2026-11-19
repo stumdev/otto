@@ -1,6 +1,11 @@
 package app.otto.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -16,6 +21,11 @@ import app.otto.ui.theme.OttoColors
 /** Linha branca de 2dp, sem eixos, com o ponto final destacado. */
 @Composable
 fun Sparkline(values: List<Long>, description: String, modifier: Modifier = Modifier) {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(values) {
+        progress.snapTo(0f)
+        progress.animateTo(1f, tween(1100, easing = Motion.Emphasized))
+    }
     Canvas(modifier.semantics { contentDescription = description }) {
         if (values.size < 2) return@Canvas
         val min = values.min()
@@ -39,9 +49,13 @@ fun Sparkline(values: List<Long>, description: String, modifier: Modifier = Modi
                 cubicTo(cx, p0.y, cx, p1.y, p1.x, p1.y)
             }
         }
-        drawPath(path, OttoColors.Text, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+        clipRect(right = pad + w * progress.value + 2.dp.toPx()) {
+            drawPath(path, OttoColors.Text, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+        }
+        // ponto final surge quando a linha termina de se desenhar
+        val dot = ((progress.value - 0.85f) / 0.15f).coerceIn(0f, 1f)
         val end = pts.last()
-        drawCircle(OttoColors.Bg, radius = 6.dp.toPx(), center = end)
-        drawCircle(OttoColors.Text, radius = 4.dp.toPx(), center = end)
+        drawCircle(OttoColors.Bg, radius = 6.dp.toPx() * dot, center = end)
+        drawCircle(OttoColors.Text, radius = 4.dp.toPx() * dot, center = end)
     }
 }

@@ -17,9 +17,15 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(8080),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   TRUST_PROXY: bool(false),
-  DATABASE_PATH: z.string().default('./data/otto.db'),
+  /** Pasta dos dados: directory.db (contas) e users/<id>.db (um banco por usuário). ":memory:" = só RAM (testes). */
+  DATA_DIR: z.string().default('./data'),
 
-  APP_TOKEN: z.string().min(32, 'APP_TOKEN precisa ter pelo menos 32 caracteres (use `npm run gen-token`).'),
+  /** Se definido, o cadastro exige este código (convite). Vazio = cadastro aberto. */
+  SIGNUP_CODE: optStr,
+  /** Limite de cadastros por IP por hora. */
+  SIGNUP_RATE_PER_HOUR: z.coerce.number().int().min(1).max(10000).default(10),
+  /** Sessões sem uso por mais que isso (dias) expiram. */
+  SESSION_IDLE_DAYS: z.coerce.number().int().min(1).max(3650).default(365),
 
   MOCK_MODE: bool(true),
 
@@ -27,7 +33,8 @@ const EnvSchema = z.object({
   PLUGGY_BASE_URL: z.url().default('https://api.pluggy.ai'),
   PLUGGY_CLIENT_ID: optStr,
   PLUGGY_CLIENT_SECRET: optStr,
-  PLUGGY_ITEM_IDS: optStr, // separados por vírgula (preparado para multi-conta)
+  /** Script do widget Pluggy Connect (carregado pela página /connect). */
+  PLUGGY_CONNECT_SCRIPT_URL: z.url().default('https://cdn.pluggy.ai/pluggy-connect/v2.7.0/pluggy-connect.js'),
   PLUGGY_WEBHOOK_SIGNING_SECRET: optStr,
   PLUGGY_WEBHOOK_SIGNING_SECRET_PREVIOUS: optStr,
   PLUGGY_WEBHOOK_HEADER_SECRET: optStr,
@@ -51,7 +58,7 @@ const EnvSchema = z.object({
   GEMINI_BASE_URL: z.url().default('https://generativelanguage.googleapis.com/v1beta/openai/'),
   GEMINI_MODEL: z.string().default('gemini-3.8-flash'),
   AI_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(30000),
-  AI_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+  AI_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(3),
 
   // Padrões de ajustes (podem ser alterados pelo app em PUT /v1/settings)
   DEFAULT_BIG_OUTFLOW_CENTS: z.coerce.number().int().min(0).default(100000),
@@ -71,7 +78,6 @@ export interface AiProviderConfig {
 }
 
 export interface Config extends Env {
-  pluggyItemIds: string[];
   pluggyEnabled: boolean;
   aiProviders: AiProviderConfig[];
 }
@@ -84,16 +90,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
   }
   const env = parsed.data;
 
-  const pluggyItemIds = (env.PLUGGY_ITEM_IDS ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const pluggyEnabled = !env.MOCK_MODE && !!env.PLUGGY_CLIENT_ID && !!env.PLUGGY_CLIENT_SECRET && pluggyItemIds.length > 0;
+  const pluggyEnabled = !env.MOCK_MODE && !!env.PLUGGY_CLIENT_ID && !!env.PLUGGY_CLIENT_SECRET;
 
   if (!env.MOCK_MODE && !pluggyEnabled) {
-    throw new Error(
-      'MOCK_MODE=false exige PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET e PLUGGY_ITEM_IDS. Veja o README, seção "Ligar o modo real".',
-    );
+    throw new Error('MOCK_MODE=false exige PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET. Veja o README, seção "Ligar o modo real".');
   }
 
   const available: Record<string, AiProviderConfig | undefined> = {
@@ -109,5 +109,5 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     .map((n) => available[n])
     .filter((p): p is AiProviderConfig => !!p);
 
-  return { ...env, pluggyItemIds, pluggyEnabled, aiProviders };
+  return { ...env, pluggyEnabled, aiProviders };
 }

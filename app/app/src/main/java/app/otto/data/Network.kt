@@ -38,17 +38,21 @@ object Network {
         .retryOnConnectionFailure(true)
         .build()
 
-    fun authed(base: OkHttpClient, token: String, readTimeoutSec: Long = 30): OkHttpClient = base.newBuilder()
-        .readTimeout(readTimeoutSec, TimeUnit.SECONDS)
-        .addInterceptor { chain ->
-            chain.proceed(
-                chain.request().newBuilder()
-                    .header("Authorization", "Bearer $token")
-                    .header("Accept", "application/json")
-                    .build(),
-            )
-        }
-        .build()
+    /** [onUnauthorized] é chamado quando o servidor diz que a sessão não vale mais (401). */
+    fun authed(base: OkHttpClient, token: String, readTimeoutSec: Long = 30, onUnauthorized: () -> Unit = {}): OkHttpClient =
+        base.newBuilder()
+            .readTimeout(readTimeoutSec, TimeUnit.SECONDS)
+            .addInterceptor { chain ->
+                val response = chain.proceed(
+                    chain.request().newBuilder()
+                        .header("Authorization", "Bearer $token")
+                        .header("Accept", "application/json")
+                        .build(),
+                )
+                if (response.code == 401) onUnauthorized()
+                response
+            }
+            .build()
 
     fun api(client: OkHttpClient, baseUrl: HttpUrl): OttoApi = Retrofit.Builder()
         .baseUrl(baseUrl)

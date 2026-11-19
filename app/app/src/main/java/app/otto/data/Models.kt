@@ -132,9 +132,11 @@ data class SettingsPatch(
 @Serializable
 data class ServerStatus(
     val mode: String,
+    val connected: Boolean = true,
     val pushEnabled: Boolean,
     val ai: String,
     val aiProviders: List<String> = emptyList(),
+    val aiModel: String? = null,
     val lastSyncAt: String? = null,
     val lastNotificationId: Long = 0,
     val version: String = "",
@@ -223,7 +225,7 @@ sealed interface ChatCard {
 }
 
 @Serializable
-data class ChatMeta(val mode: String, val provider: String? = null, val reason: String? = null)
+data class ChatMeta(val mode: String, val provider: String? = null, val model: String? = null, val reason: String? = null)
 
 @Serializable
 data class ChatDelta(val text: String)

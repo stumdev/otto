@@ -14,7 +14,6 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "gen-token": "node -e \"console.log(require('node:crypto').randomBytes(48).toString('base64url'))\"",
-    "setup-qr": "tsx scripts/setup-qr.ts",
     "pluggy:check": "tsx scripts/pluggy-check.ts",
     "pluggy:register-webhook": "tsx scripts/pluggy-register-webhook.ts",
     "backup": "tsx src/cli/backup.ts"
@@ -28,14 +27,12 @@
     "firebase-admin": "14.5.0",
     "luxon": "3.7.2",
     "pino": "10.4.0",
-    "qrcode-terminal": "0.12.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/better-sqlite3": "9.6.0",
     "@types/luxon": "3.7.6",
     "@types/node": "26.6.6",
-    "@types/qrcode-terminal": "0.12.2",
     "tsx": "4.23.15",
     "typescript": "7.0.2",
     "vitest": "5.1.0"

@@ -33,8 +33,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class SettingsState(
-    val serverUrl: String = "",
-    val tokenHint: String = "",
+    val email: String = "",
     val settings: ServerSettings? = null,
     val status: ServerStatus? = null,
     val loading: Boolean = true,
@@ -74,8 +73,7 @@ class SettingsViewModel @Inject constructor(
         val cfg = prefs.config.value
         _state.update {
             it.copy(
-                serverUrl = cfg.serverUrl.orEmpty(),
-                tokenHint = cfg.token?.let { t -> "••••" + t.takeLast(4) }.orEmpty(),
+                email = cfg.email.orEmpty(),
                 biometric = cfg.biometricEnabled,
                 secureScreen = cfg.secureScreen,
                 pushActive = prefs.pushActive,
@@ -202,8 +200,33 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun disconnect() {
-        prefs.clearServer()
-        viewModelScope.launch { chatStore.clear() }
+    /** Sai da conta neste aparelho. A navegação para a tela de entrada é feita pelo NavHost (sessão encerrada). */
+    fun signOut() {
+        viewModelScope.launch {
+            chatStore.clear()
+            repo.signOut()
+        }
+    }
+
+    /** Desconecta o Nubank e apaga os dados importados; a conta do Otto continua. */
+    fun disconnectBank(onDone: () -> Unit) {
+        viewModelScope.launch {
+            runCatching { repo.disconnectBank() }
+                .onSuccess {
+                    chatStore.clear()
+                    prefs.setBankConnected(false)
+                    onDone()
+                }
+                .onFailure { e -> _messages.tryEmit(e.userMessage()) }
+        }
+    }
+
+    /** Exclui a conta e todos os dados no servidor. [onError] recebe a mensagem se falhar (ex.: senha errada). */
+    fun deleteAccount(password: String, onError: (String) -> Unit) {
+        viewModelScope.launch {
+            repo.deleteAccount(password)
+                .onSuccess { chatStore.clear() }
+                .onFailure { e -> onError(e.message ?: e.userMessage()) }
+        }
     }
 }

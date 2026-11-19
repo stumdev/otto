@@ -1,17 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
-import { FakePush, makeConfig, memoryDb, TEST_TOKEN } from './helpers.js';
+import { FakePush, makeConfig, signup, signupConnected, TEST_PASSWORD } from './helpers.js';
 
 let app: FastifyInstance;
 const push = new FakePush();
-const auth = { authorization: `Bearer ${TEST_TOKEN}` };
+let auth: { authorization: string };
 
 beforeAll(async () => {
-  const built = await buildApp({ config: makeConfig(), db: memoryDb(), push, logger: false, disableJobs: true });
+  const built = await buildApp({ config: makeConfig(), push, logger: false, disableJobs: true });
   app = built.app;
-  await built.services.syncOnce();
   await app.ready();
+  auth = (await signupConnected(app)).headers;
 });
 afterAll(async () => {
   await app.close();
@@ -24,7 +24,7 @@ describe('API', () => {
     expect(r.json()).toMatchObject({ status: 'ok', mode: 'mock' });
   });
 
-  it('exige o Bearer token', async () => {
+  it('exige sessão válida', async () => {
     expect((await app.inject({ method: 'GET', url: '/v1/summary' })).statusCode).toBe(401);
     expect(
       (await app.inject({ method: 'GET', url: '/v1/summary', headers: { authorization: 'Bearer errado' } })).statusCode,

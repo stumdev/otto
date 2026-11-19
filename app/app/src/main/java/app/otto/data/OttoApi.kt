@@ -1,13 +1,45 @@
 package app.otto.data
 
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Query
 
 /** API do servidor do Otto. O app nunca fala direto com o banco, o agregador ou a IA. */
 interface OttoApi {
+    // ----- sem sessão -----
+    @GET("v1/config")
+    suspend fun publicConfig(): PublicConfig
+
+    @POST("v1/auth/register")
+    suspend fun register(@Body body: RegisterBody): SessionResponse
+
+    @POST("v1/auth/login")
+    suspend fun login(@Body body: LoginBody): SessionResponse
+
+    // ----- conta e conexão com o banco -----
+    @POST("v1/auth/logout")
+    suspend fun logout(): OkResponse
+
+    @HTTP(method = "DELETE", path = "v1/account", hasBody = true)
+    suspend fun deleteAccount(@Body body: DeleteAccountBody): OkResponse
+
+    @GET("v1/connection")
+    suspend fun connection(): ConnectionInfo
+
+    @POST("v1/connection/token")
+    suspend fun connectToken(): ConnectTokenResponse
+
+    @POST("v1/connection/items")
+    suspend fun connectItem(@Body body: ConnectItemBody): ConnectItemResponse
+
+    @DELETE("v1/connection")
+    suspend fun disconnectBank(): OkResponse
+
+    // ----- dados -----
     @GET("v1/status")
     suspend fun status(): ServerStatus
 

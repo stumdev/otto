@@ -89,6 +89,7 @@ const ItemSchema = z
     id: z.string(),
     status: z.string(),
     executionStatus: z.string().nullish(),
+    clientUserId: z.string().nullish(),
     lastUpdatedAt: z.string().nullish(),
     consentExpiresAt: z.string().nullish(),
     error: z.object({ code: z.string(), message: z.string() }).nullish(),
@@ -177,6 +178,34 @@ export class PluggyClient {
     }
     if (!res.ok) throw new PluggyError(`Pluggy GET ${url.pathname} respondeu ${res.status}`, res.status);
     return res.json();
+  }
+
+  /** Chamada com corpo (POST/DELETE). Mesma renovação da chave que o GET. */
+  private async send(method: 'POST' | 'DELETE', path: string, body?: unknown, attempt = 0): Promise<unknown> {
+    const key = await this.getApiKey(attempt > 0);
+    const res = await this.fetchImpl(new URL(path, this.baseUrl), {
+      method,
+      headers: { 'X-API-KEY': key, accept: 'application/json', 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (res.status === 401 && attempt === 0) return this.send(method, path, body, 1);
+    if (!res.ok) throw new PluggyError(`Pluggy ${method} ${path.split('?')[0]} respondeu ${res.status}`, res.status);
+    const text = await res.text();
+    return text ? JSON.parse(text) : {};
+  }
+
+  /** Token de curta duração para o widget Pluggy Connect. `clientUserId` amarra o item ao usuário do Otto. */
+  async createConnectToken(opts: { clientUserId: string; webhookUrl?: string }): Promise<string> {
+    const body: Record<string, unknown> = { options: { clientUserId: opts.clientUserId } };
+    if (opts.webhookUrl) (body.options as Record<string, unknown>).webhookUrl = opts.webhookUrl;
+    const r = z.object({ accessToken: z.string() }).parse(await this.send('POST', '/connect_token', body));
+    return r.accessToken;
+  }
+
+  /** Remove o item na Pluggy (revoga o consentimento). */
+  async deleteItem(itemId: string): Promise<void> {
+    await this.send('DELETE', `/items/${encodeURIComponent(itemId)}`);
   }
 
   async getItem(itemId: string): Promise<PluggyItem> {

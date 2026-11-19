@@ -7,6 +7,9 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -29,17 +32,26 @@ sealed interface ChatStreamEvent {
     data object Done : ChatStreamEvent
 }
 
-class NotConfiguredException : IllegalStateException("Servidor não configurado")
+/** Erro de conta com mensagem pronta para mostrar ao usuário. */
+class AuthException(message: String) : Exception(message)
+
+class NotConfiguredException : IllegalStateException("Sem sessão")
+
+/** Mensagem do servidor ({"error": "..."}) quando houver; usada nas telas de conta. */
+private fun HttpException.serverMessage(): String? = runCatching {
+    val body = response()?.errorBody()?.string().orEmpty()
+    Network.json.parseToJsonElement(body).jsonObject["error"]?.jsonPrimitive?.contentOrNull
+}.getOrNull()
 
 /** Mensagem amigável (pt-BR) para qualquer falha de rede/servidor. */
 fun Throwable.userMessage(): String = when (this) {
-    is NotConfiguredException -> "Configure o servidor nos Ajustes."
+    is NotConfiguredException -> "Entre na sua conta para continuar."
     is HttpException -> when (code()) {
-        401 -> "Token inválido. Confira nos Ajustes."
+        401 -> "Sessão expirada. Entre de novo."
         404 -> "Recurso não encontrado no servidor."
-        429 -> "Muitas requisições. Tente em instantes."
+        429 -> "Muitas tentativas. Tente em instantes."
         in 500..599 -> "O servidor teve um problema. Tente de novo."
-        else -> "Erro do servidor (${code()})."
+        else -> serverMessage() ?: "Erro do servidor (${code()})."
     }
     is SerializationException -> "Resposta inesperada do servidor."
     is IOException -> "Sem conexão com o servidor."
@@ -51,31 +63,78 @@ class OttoRepository @Inject constructor(private val prefs: AppPrefs) {
 
     private val base: OkHttpClient = Network.baseClient()
 
-    private data class Cached(val url: HttpUrl, val token: String, val api: OttoApi, val sseClient: OkHttpClient)
+    private data class Cached(val url: HttpUrl, val token: String, val api: OttoApi, val slowApi: OttoApi, val sseClient: OkHttpClient)
 
     @Volatile
     private var cached: Cached? = null
 
+    private fun serverUrl(): HttpUrl =
+        prefs.config.value.serverUrl?.let { Network.normalizeBaseUrl(it) } ?: throw NotConfiguredException()
+
     private fun current(): Cached {
         val cfg = prefs.config.value
-        val url = cfg.serverUrl?.let { Network.normalizeBaseUrl(it) } ?: throw NotConfiguredException()
+        val url = serverUrl()
         val token = cfg.token ?: throw NotConfiguredException()
         cached?.let { if (it.url == url && it.token == token) return it }
-        val client = Network.authed(base, token)
-        val sse = Network.authed(base, token, readTimeoutSec = 90)
-        return Cached(url, token, Network.api(client, url), sse).also { cached = it }
+        // 401 = sessão encerrada no servidor: sai da conta aqui (só se ainda for esta mesma sessão)
+        val onUnauthorized = { if (prefs.config.value.token == token) prefs.clearSession() }
+        val client = Network.authed(base, token, onUnauthorized = onUnauthorized)
+        val slow = Network.authed(base, token, readTimeoutSec = 150, onUnauthorized = onUnauthorized)
+        val sse = Network.authed(base, token, readTimeoutSec = 90, onUnauthorized = onUnauthorized)
+        return Cached(url, token, Network.api(client, url), Network.api(slow, url), sse).also { cached = it }
     }
 
     private suspend fun <T> call(block: suspend OttoApi.() -> T): T = withContext(Dispatchers.IO) { current().api.block() }
 
-    /** Testa URL + token antes de salvar (tela de configuração). */
-    suspend fun probe(rawUrl: String, token: String): Result<ServerStatus> = withContext(Dispatchers.IO) {
+    // ----- conta -----
+
+    private val publicApi: OttoApi by lazy { Network.api(base, serverUrl()) }
+
+    /** O servidor exige código de convite para criar conta? Falha de rede = não sabemos (null). */
+    suspend fun publicConfig(): PublicConfig? = withContext(Dispatchers.IO) { runCatching { publicApi.publicConfig() }.getOrNull() }
+
+    suspend fun register(email: String, password: String, name: String?, signupCode: String?): Result<Unit> =
+        authCall(email) { publicApi.register(RegisterBody(email.trim(), password, name?.trim()?.ifBlank { null }, signupCode?.trim()?.ifBlank { null })) }
+
+    suspend fun login(email: String, password: String): Result<Unit> =
+        authCall(email) { publicApi.login(LoginBody(email.trim(), password)) }
+
+    private suspend fun authCall(email: String, block: suspend () -> SessionResponse): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val url = Network.normalizeBaseUrl(rawUrl)
-                ?: throw IllegalArgumentException("URL inválida. Em produção use https://")
-            Network.api(Network.authed(base, token), url).status()
-        }
+            val r = block()
+            prefs.saveSession(r.token, r.user.email)
+        }.recoverCatching { e -> throw if (e is HttpException) AuthException(e.serverMessage() ?: e.userMessage()) else e }
     }
+
+    /** Encerra a sessão no servidor (se der) e neste aparelho. */
+    suspend fun signOut() {
+        runCatching { call { logout() } }
+        prefs.clearSession()
+    }
+
+    /** Exclui a conta e todos os dados no servidor. Retorna a mensagem de erro, se houver. */
+    suspend fun deleteAccount(password: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching { current().api.deleteAccount(DeleteAccountBody(password)); prefs.clearSession() }
+            .recoverCatching { e -> throw if (e is HttpException) AuthException(e.serverMessage() ?: e.userMessage()) else e }
+    }
+
+    // ----- conexão com o banco -----
+
+    suspend fun connection(): ConnectionInfo = call { connection() }.also { prefs.setBankConnected(it.connected) }
+    suspend fun connectToken(): ConnectTokenResponse = call { connectToken() }
+
+    /** Registra o item criado pelo widget (ou a conta de demonstração) e espera a primeira importação. */
+    suspend fun connectItem(itemId: String?): ConnectItemResponse = withContext(Dispatchers.IO) {
+        current().slowApi.connectItem(ConnectItemBody(itemId)).also { prefs.setBankConnected(true) }
+    }
+
+    suspend fun disconnectBank() {
+        call { disconnectBank() }
+        prefs.setBankConnected(false)
+    }
+
+    /** URL da página que hospeda o widget Pluggy Connect (o token vai no fragmento, que não vai ao servidor). */
+    fun connectPageUrl(connectToken: String): String = serverUrl().resolve("connect")!!.toString() + "#token=" + connectToken
 
     suspend fun status() = call { status() }
     suspend fun summary() = call { summary() }
@@ -131,7 +190,7 @@ class OttoRepository @Inject constructor(private val prefs: AppPrefs) {
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
                 val msg = when {
-                    response?.code == 401 -> "Token inválido. Confira nos Ajustes."
+                    response?.code == 401 -> "Sessão expirada. Entre de novo."
                     response?.code == 429 -> "Muitas perguntas seguidas. Espere um pouco."
                     response != null && !response.isSuccessful -> "O servidor respondeu com erro (${response.code})."
                     else -> (t ?: IOException()).userMessage()

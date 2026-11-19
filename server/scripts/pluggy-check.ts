@@ -2,21 +2,22 @@
  * Confere as credenciais da Pluggy e o itemId: mostra o status do item, a validade do
  * consentimento e as contas encontradas (sem exibir transações).
  *
- * Uso: npm run pluggy:check
+ * Uso: npm run pluggy:check -- <itemId> [<itemId>...]
  */
 import { PluggyClient } from '../src/services/pluggy/client.js';
 import { decimalToCents, formatBRL } from '../src/lib/money.js';
 import { loadDotEnv } from './env.js';
 
 loadDotEnv();
-const { PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET, PLUGGY_ITEM_IDS, PLUGGY_BASE_URL } = process.env;
-if (!PLUGGY_CLIENT_ID || !PLUGGY_CLIENT_SECRET || !PLUGGY_ITEM_IDS) {
-  console.error('Defina PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET e PLUGGY_ITEM_IDS no .env.');
+const { PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET, PLUGGY_BASE_URL } = process.env;
+const itemIds = process.argv.slice(2);
+if (!PLUGGY_CLIENT_ID || !PLUGGY_CLIENT_SECRET || itemIds.length === 0) {
+  console.error('Defina PLUGGY_CLIENT_ID e PLUGGY_CLIENT_SECRET no .env e passe o(s) itemId(s): npm run pluggy:check -- <itemId>');
   process.exit(1);
 }
 const client = new PluggyClient(PLUGGY_BASE_URL || 'https://api.pluggy.ai', PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET);
 
-for (const itemId of PLUGGY_ITEM_IDS.split(',').map((s) => s.trim()).filter(Boolean)) {
+for (const itemId of itemIds) {
   try {
     const item = await client.getItem(itemId);
     console.log(`\nItem ${itemId}`);

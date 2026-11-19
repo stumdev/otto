@@ -67,7 +67,9 @@ export async function* streamChatCompletion(
         messages: body.messages,
         ...(body.tools?.length ? { tools: body.tools, tool_choice: 'auto' } : {}),
         temperature: body.temperature ?? 0.2,
-        max_tokens: body.max_tokens ?? 1024,
+        max_tokens: body.max_tokens ?? 600,
+        // gpt-oss gasta muitos tokens "pensando"; o plano grátis da Groq limita tokens por minuto
+        ...(provider.name === 'groq' && /gpt-oss/.test(provider.model) ? { reasoning_effort: 'low' } : {}),
         stream: true,
       }),
       signal: AbortSignal.any(signals),

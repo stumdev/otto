@@ -12,7 +12,7 @@ import { mapCardTransaction, mapCreditCard, mapInvestment, mapPluggyTransaction 
 import { PluggySync } from '../src/services/pluggy/sync.js';
 import { defaultSettings, type Settings } from '../src/services/settings.js';
 import { buildCards, buildReserves } from '../src/services/wallet.js';
-import { FakePush, makeConfig, memoryDb, seedAccount, silentLog, TEST_TOKEN, tx } from './helpers.js';
+import { FakePush, makeConfig, memoryDb, seedAccount, silentLog, signupConnected, tx } from './helpers.js';
 
 const NOW = new Date('2026-11-19T15:00:00.000Z'); // 12:00 em São Paulo
 const settings: Settings = { ...defaultSettings(makeConfig()), cardDueDay: null };
@@ -240,9 +240,8 @@ describe('sincronização Pluggy de cartão e caixinhas', () => {
 
 describe('API', () => {
   it('GET /v1/wallet e resumo trazem caixinhas e cartão; ajuste de vencimento é validado', async () => {
-    const { app, services } = await buildApp({ config: makeConfig(), db: memoryDb(), logger: false, disableJobs: true, now: () => NOW });
-    await services.syncOnce();
-    const auth = { authorization: `Bearer ${TEST_TOKEN}` };
+    const { app } = await buildApp({ config: makeConfig(), logger: false, disableJobs: true, now: () => NOW });
+    const auth = (await signupConnected(app)).headers;
     const w = (await app.inject({ method: 'GET', url: '/v1/wallet', headers: auth })).json();
     expect(w.reserves.items.map((i: { name: string }) => i.name)).toEqual(['Reserva de emergência', 'Viagem']);
     expect(w.reserves.totalCents).toBe(1_590_000);

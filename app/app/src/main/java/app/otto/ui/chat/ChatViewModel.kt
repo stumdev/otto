@@ -10,6 +10,7 @@ import app.otto.data.ChatTurnDto
 import app.otto.data.Dates
 import app.otto.data.StoredMessage
 import app.otto.data.OttoRepository
+import app.otto.data.friendlyModelName
 import app.otto.data.userMessage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -30,11 +31,14 @@ data class UiMessage(
     val streaming: Boolean = false,
 )
 
+private const val LOCAL_LABEL = "Respostas locais"
+
 data class ChatState(
     val messages: List<UiMessage> = emptyList(),
     val typing: Boolean = false,
     val sending: Boolean = false,
-    val syncLabel: String = "—",
+    /** Modelo de IA em uso (mostrado no topo, como o seletor de modelo do Claude). */
+    val modelLabel: String = "",
     val loaded: Boolean = false,
 )
 
@@ -67,7 +71,7 @@ class ChatViewModel @Inject constructor(
         }
         viewModelScope.launch {
             runCatching { repo.status() }.onSuccess { s ->
-                _state.update { it.copy(syncLabel = "Sincronizado ${Dates.relative(s.lastSyncAt)}") }
+                _state.update { it.copy(modelLabel = s.aiModel?.takeIf { _ -> s.ai == "ai" }?.let(::friendlyModelName) ?: LOCAL_LABEL) }
             }
         }
     }
@@ -93,7 +97,10 @@ class ChatViewModel @Inject constructor(
             try {
                 repo.chat(turns).collect { ev ->
                     when (ev) {
-                        is ChatStreamEvent.Meta -> edit(answerId) { it.copy(offline = ev.meta.mode == "offline") }
+                        is ChatStreamEvent.Meta -> {
+                            _state.update { st -> st.copy(modelLabel = ev.meta.model?.let(::friendlyModelName) ?: LOCAL_LABEL) }
+                            edit(answerId) { it.copy(offline = ev.meta.mode == "offline") }
+                        }
                         is ChatStreamEvent.Delta -> {
                             _state.update { it.copy(typing = false) }
                             edit(answerId) { it.copy(text = it.text + ev.text) }

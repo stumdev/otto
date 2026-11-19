@@ -4,6 +4,8 @@ import android.net.Uri
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
@@ -15,13 +17,16 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import app.otto.ui.chat.ChatScreen
+import app.otto.ui.components.Motion
 import app.otto.ui.home.HomeScreen
 import app.otto.ui.settings.SettingsScreen
-import app.otto.ui.setup.SetupScreen
+import app.otto.ui.auth.AuthScreen
+import app.otto.ui.connect.ConnectScreen
 import app.otto.ui.transactions.TransactionsScreen
 
 object Routes {
-    const val SETUP = "setup"
+    const val AUTH = "auth"
+    const val CONNECT = "connect"
     const val HOME = "home"
     const val CHAT = "chat?q={q}"
     const val TRANSACTIONS = "transactions"
@@ -32,19 +37,24 @@ object Routes {
 private const val ANIM_MS = 220
 
 @Composable
-fun OttoNavHost(nav: NavHostController, configured: Boolean, pendingTarget: String?, onTargetConsumed: () -> Unit) {
-    // definido uma vez; depois a navegação é explícita (configurar/desconectar)
-    val start = remember { if (configured) Routes.HOME else Routes.SETUP }
+fun OttoNavHost(nav: NavHostController, signedIn: Boolean, bankConnected: Boolean, pendingTarget: String?, onTargetConsumed: () -> Unit) {
+    // definido uma vez; depois a navegação é explícita (entrar, conectar o banco, sair)
+    val start = remember { if (!signedIn) Routes.AUTH else if (!bankConnected) Routes.CONNECT else Routes.HOME }
     NavHost(
         navController = nav,
         startDestination = start,
-        enterTransition = { fadeIn(tween(ANIM_MS)) + slideInHorizontally(tween(ANIM_MS)) { it / 12 } },
-        exitTransition = { fadeOut(tween(ANIM_MS)) },
-        popEnterTransition = { fadeIn(tween(ANIM_MS)) },
-        popExitTransition = { fadeOut(tween(ANIM_MS)) + slideOutHorizontally(tween(ANIM_MS)) { it / 12 } },
+        enterTransition = { fadeIn(tween(360, delayMillis = 60)) + slideInHorizontally(tween(440, easing = Motion.Emphasized)) { it / 5 } + scaleIn(tween(440, easing = Motion.Emphasized), initialScale = 0.94f) },
+        exitTransition = { fadeOut(tween(220)) + slideOutHorizontally(tween(440, easing = Motion.Emphasized)) { -it / 8 } + scaleOut(tween(440, easing = Motion.Emphasized), targetScale = 0.96f) },
+        popEnterTransition = { fadeIn(tween(320, delayMillis = 40)) + slideInHorizontally(tween(440, easing = Motion.Emphasized)) { -it / 8 } + scaleIn(tween(440, easing = Motion.Emphasized), initialScale = 0.96f) },
+        popExitTransition = { fadeOut(tween(240)) + slideOutHorizontally(tween(440, easing = Motion.Emphasized)) { it / 5 } + scaleOut(tween(440, easing = Motion.Emphasized), targetScale = 0.94f) },
     ) {
-        composable(Routes.SETUP) {
-            SetupScreen(onDone = {
+        composable(Routes.AUTH) {
+            AuthScreen(onDone = {
+                nav.navigate(Routes.CONNECT) { popUpTo(0) { inclusive = true } }
+            })
+        }
+        composable(Routes.CONNECT) {
+            ConnectScreen(onDone = {
                 nav.navigate(Routes.HOME) { popUpTo(0) { inclusive = true } }
             })
         }
@@ -65,16 +75,22 @@ fun OttoNavHost(nav: NavHostController, configured: Boolean, pendingTarget: Stri
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 onBack = { nav.popBackStack() },
-                onEditServer = { nav.navigate(Routes.SETUP) },
-                onDisconnected = { nav.navigate(Routes.SETUP) { popUpTo(0) { inclusive = true } } },
+                onBankDisconnected = { nav.navigate(Routes.CONNECT) { popUpTo(0) { inclusive = true } } },
             )
         }
     }
 
+    // sessão encerrada (sair, conta excluída ou 401 do servidor): volta para a tela de entrada
+    LaunchedEffect(signedIn) {
+        if (!signedIn && nav.currentDestination?.route != Routes.AUTH) {
+            nav.navigate(Routes.AUTH) { popUpTo(0) { inclusive = true } }
+        }
+    }
+
     // toque numa notificação: abre a tela certa
-    LaunchedEffect(pendingTarget, configured) {
+    LaunchedEffect(pendingTarget, signedIn, bankConnected) {
         val target = pendingTarget ?: return@LaunchedEffect
-        if (configured) {
+        if (signedIn && bankConnected) {
             when (target) {
                 "settings" -> nav.navigate(Routes.SETTINGS) { launchSingleTop = true }
                 "transactions" -> nav.navigate(Routes.TRANSACTIONS) { launchSingleTop = true }

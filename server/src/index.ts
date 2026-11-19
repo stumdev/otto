@@ -1,6 +1,5 @@
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
-import { openDatabase } from './db/index.js';
 import { createFcmSender } from './services/fcm.js';
 import pino from 'pino';
 
@@ -18,14 +17,8 @@ async function main(): Promise<void> {
     bootLog.warn('MOCK_MODE=true em produção: os dados exibidos são fictícios');
   }
 
-  const db = openDatabase(config.DATABASE_PATH);
   const push = await createFcmSender(config.FIREBASE_SERVICE_ACCOUNT_FILE, bootLog);
-  const { app, services } = await buildApp({ config, db, push });
-
-  if (config.MOCK_MODE) {
-    // gera o histórico fictício antes de aceitar requisições
-    await services.syncOnce();
-  }
+  const { app } = await buildApp({ config, push });
 
   app.log.info(
     {
@@ -39,7 +32,6 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, 'encerrando');
     await app.close();
-    db.close();
     process.exit(0);
   };
   process.on('SIGINT', () => void shutdown('SIGINT'));
