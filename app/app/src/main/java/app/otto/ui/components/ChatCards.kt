@@ -44,7 +44,39 @@ fun ChatCardView(card: ChatCard, modifier: Modifier = Modifier) {
             ProportionBar(card.inCents, card.outCents)
         }
 
-        is ChatCard.ListCard -> OttoCard(modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 14.dp)) {
+        is ChatCard.ReservesCard -> OttoCard(modifier.fillMaxWidth()) {
+            Text(card.title, style = OttoType.Caption, color = OttoColors.Text2)
+            Spacer(Modifier.height(6.dp))
+            Text(Money.brl(card.totalCents), style = OttoType.CardValue, color = OttoColors.Text)
+            card.items.forEach { TxRow(it.name, it.subtitle, it.amountCents, Modifier.padding(vertical = 2.dp)) }
+        }
+
+        is ChatCard.Credit -> OttoCard(modifier.fillMaxWidth()) {
+            Text(card.title, style = OttoType.Caption, color = OttoColors.Text2)
+            Spacer(Modifier.height(6.dp))
+            Text("Fatura atual " + Money.brl(card.billCents), style = OttoType.CardValue, color = OttoColors.Text)
+            Spacer(Modifier.height(4.dp))
+            Text(card.subtitle, style = OttoType.Small, color = OttoColors.Text2)
+            if (card.limitCents != null && card.availableCents != null) {
+                Spacer(Modifier.height(10.dp))
+                ProportionBar(card.availableCents, (card.limitCents - card.availableCents).coerceAtLeast(0))
+                Spacer(Modifier.height(4.dp))
+                Text("Disponível ${Money.brl(card.availableCents)} de ${Money.brl(card.limitCents)}", style = OttoType.Small, color = OttoColors.Text2)
+            }
+        }
+
+        is ChatCard.Breakdown -> OttoCard(modifier.fillMaxWidth()) {
+            Text(card.title, style = OttoType.Caption, color = OttoColors.Text2)
+            card.items.forEach {
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth()) {
+                    Text(it.label, style = OttoType.Body, color = OttoColors.Text, modifier = Modifier.weight(1f))
+                    AmountText(it.amountCents, OttoType.Body)
+                }
+            }
+        }
+
+        is ChatCard.ListCard ->OttoCard(modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 14.dp)) {
             Text(card.title, style = OttoType.Caption, color = OttoColors.Text2)
             Spacer(Modifier.height(6.dp))
             card.items.forEach { TxRow(it.title, it.subtitle, it.amountCents, Modifier.padding(vertical = 2.dp)) }

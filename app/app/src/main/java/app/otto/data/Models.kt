@@ -17,6 +17,8 @@ data class TxDto(
     val method: String? = null,
     val category: String? = null,
     val status: String = "POSTED",
+    /** Movimentação com as caixinhas: aparece na lista, mas não conta nos totais. */
+    val internal: Boolean = false,
 )
 
 @Serializable
@@ -43,6 +45,66 @@ data class Summary(
     val week: WeekDto,
     val series: List<DayPoint>,
     val recent: List<TxDto>,
+    val reserves: Reserves = Reserves(),
+    val cards: List<CreditCard> = emptyList(),
+)
+
+@Serializable
+data class ReserveItem(val id: String, val name: String, val balanceCents: Long, val rateLabel: String? = null)
+
+@Serializable
+data class Reserves(
+    val totalCents: Long = 0,
+    val items: List<ReserveItem> = emptyList(),
+    val updatedAt: String? = null,
+)
+
+@Serializable
+data class BillForecast(val month: String, val totalCents: Long, val count: Int)
+
+@Serializable
+data class PastBill(val dueDate: String, val totalCents: Long, val minimumCents: Long? = null)
+
+@Serializable
+data class CreditCard(
+    val id: String,
+    val name: String,
+    val last4: String? = null,
+    val brand: String? = null,
+    val level: String? = null,
+    val openBillCents: Long,
+    val creditLimitCents: Long? = null,
+    val availableLimitCents: Long? = null,
+    val usedLimitCents: Long? = null,
+    val minimumPaymentCents: Long? = null,
+    val closeDate: String? = null,
+    val dueDate: String? = null,
+    /** "banco" = informado pela instituição; "ajuste" = calculado pelo dia definido nos Ajustes. */
+    val dueDateSource: String? = null,
+    val upcomingBills: List<BillForecast> = emptyList(),
+    val pastBills: List<PastBill> = emptyList(),
+)
+
+@Serializable
+data class CardTx(
+    val id: Long,
+    val cardId: String,
+    val occurredAt: String,
+    val localDate: String,
+    val time: String? = null,
+    val amountCents: Long,
+    val description: String,
+    val category: String? = null,
+    val status: String = "POSTED",
+    val billMonth: String? = null,
+    val installment: String? = null,
+)
+
+@Serializable
+data class Wallet(
+    val reserves: Reserves = Reserves(),
+    val cards: List<CreditCard> = emptyList(),
+    val cardTransactions: List<CardTx> = emptyList(),
 )
 
 @Serializable
@@ -55,6 +117,7 @@ data class ServerSettings(
     val dailySummaryEnabled: Boolean,
     val notifyIncoming: Boolean,
     val notifyOutgoing: Boolean,
+    val cardDueDay: Int? = null,
 )
 
 @Serializable
@@ -132,6 +195,30 @@ sealed interface ChatCard {
     data class ListCard(val title: String, val items: List<Item>) : ChatCard {
         @Serializable
         data class Item(val title: String, val subtitle: String, val amountCents: Long)
+    }
+
+    @Serializable
+    @SerialName("reserves")
+    data class ReservesCard(val title: String, val totalCents: Long, val items: List<Item>) : ChatCard {
+        @Serializable
+        data class Item(val name: String, val subtitle: String, val amountCents: Long)
+    }
+
+    @Serializable
+    @SerialName("credit")
+    data class Credit(
+        val title: String,
+        val billCents: Long,
+        val limitCents: Long? = null,
+        val availableCents: Long? = null,
+        val subtitle: String,
+    ) : ChatCard
+
+    @Serializable
+    @SerialName("breakdown")
+    data class Breakdown(val title: String, val items: List<Item>) : ChatCard {
+        @Serializable
+        data class Item(val label: String, val amountCents: Long, val pct: Double)
     }
 }
 

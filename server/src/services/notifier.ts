@@ -76,6 +76,14 @@ export function transactionNotificationText(
   return { title, body: parts.join(' · '), kind };
 }
 
+/** Dinheiro indo/voltando da caixinha: não é entrada nem gasto, então o texto deixa isso claro. */
+export function reserveNotificationText(amountCents: number, balanceCents: number): { title: string; body: string } {
+  const abs = formatBRL(Math.abs(amountCents));
+  return amountCents < 0
+    ? { title: `Guardou ${abs} na caixinha`, body: `Saldo da conta ${formatBRL(balanceCents)}` }
+    : { title: `Resgatou ${abs} da caixinha`, body: `Saldo da conta ${formatBRL(balanceCents)}` };
+}
+
 export function summaryNotificationText(t: { inCents: number; outCents: number; balanceCents: number }): {
   title: string;
   body: string;

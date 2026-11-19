@@ -152,10 +152,10 @@ describe('fallback de provedor de IA', () => {
       },
     ]);
     const toolMsg = second.find((m) => m.role === 'tool')!;
-    expect(JSON.parse(toolMsg.content!)).toMatchObject({ saldo: 'R$ 48.215,90' });
+    expect(JSON.parse(toolMsg.content!)).toMatchObject({ saldo_conta: 'R$ 48.215,90', total_caixinhas: 'R$ 0,00' });
     expect(r.events.find((e) => e.event === 'card')).toEqual({
       event: 'card',
-      data: { type: 'balance', title: 'Saldo agora', amountCents: 4821590 },
+      data: { type: 'balance', title: 'Saldo na conta', amountCents: 4821590 },
     });
     // o system prompt proíbe inventar números
     expect(f.calls[0]!.body.messages[0]!.content).toMatch(/NUNCA invente/);

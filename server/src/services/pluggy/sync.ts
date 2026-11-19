@@ -2,13 +2,21 @@ import type { FastifyBaseLogger } from 'fastify';
 import type { DB } from '../../db/index.js';
 import { getMeta, setMeta } from '../../db/index.js';
 import { markTransactionsDeleted, upsertAccount } from '../../db/repo.js';
+import {
+  markCardTransactionsDeleted,
+  pruneInvestments,
+  upsertBill,
+  upsertCardTransaction,
+  upsertCreditCard,
+  upsertInvestment,
+} from '../../db/wallet.js';
 import { decimalToCents } from '../../lib/money.js';
 import { addDays, todayLocal } from '../../lib/time.js';
 import { addIngestResult, emptyIngestResult, ingestTransactions, type IngestResult } from '../ingest.js';
 import type { Notifier } from '../notifier.js';
 import type { Settings } from '../settings.js';
 import type { PluggyAccount, PluggyClient } from './client.js';
-import { mapPluggyTransaction } from './mapping.js';
+import { mapCardTransaction, mapCreditCard, mapInvestment, mapPluggyTransaction } from './mapping.js';
 
 /** Janela de sobreposição ao buscar novidades: cobre relógios dessincronizados; a dedup evita repetição. */
 const OVERLAP_MS = 30 * 60_000;
@@ -33,6 +41,8 @@ export function isBankAccount(a: PluggyAccount): boolean {
 
 export class PluggySync {
   private chain: Promise<unknown> = Promise.resolve();
+  /** Cartões de crédito vistos na última leitura de contas, por item. */
+  private cards = new Map<string, PluggyAccount[]>();
 
   constructor(private readonly d: SyncDeps) {}
 
@@ -68,6 +78,13 @@ export class PluggySync {
     return this.exclusive(async () => {
       const total = emptyIngestResult();
       const accounts = await this.refreshAccounts();
+      if ([...this.cards.values()].flat().some((c) => c.id === accountId)) {
+        for (let i = 0; i < ids.length; i += 500) {
+          const txs = await this.d.client.listTransactions(accountId, { ids: ids.slice(i, i + 500) });
+          this.saveCardTransactions(txs.map((t) => mapCardTransaction(t, accountId)));
+        }
+        return total;
+      }
       if (!accounts.some((a) => a.id === accountId)) return total;
       for (let i = 0; i < ids.length; i += 500) {
         const txs = await this.d.client.listTransactions(accountId, { ids: ids.slice(i, i + 500) });
@@ -81,11 +98,9 @@ export class PluggySync {
   /** transactions/deleted */
   deleteTransactions(ids: string[]): Promise<number> {
     return this.exclusive(async () => {
-      const n = markTransactionsDeleted(
-        this.d.db,
-        ids.map((id) => `pluggy:${id}`),
-        this.d.now().toISOString(),
-      );
+      const keys = ids.map((id) => `pluggy:${id}`);
+      const nowIso = this.d.now().toISOString();
+      const n = markTransactionsDeleted(this.d.db, keys, nowIso) + markCardTransactionsDeleted(this.d.db, keys, nowIso);
       await this.refreshAccounts();
       return n;
     });
@@ -98,8 +113,12 @@ export class PluggySync {
   }
 
   private async upsertAccountsOf(itemId: string): Promise<PluggyAccount[]> {
-    const accounts = (await this.d.client.listAccounts(itemId)).filter(isBankAccount);
+    const all = await this.d.client.listAccounts(itemId);
+    const accounts = all.filter(isBankAccount);
     const nowIso = this.d.now().toISOString();
+    const credit = all.filter((a) => a.type === 'CREDIT');
+    for (const c of credit) upsertCreditCard(this.d.db, mapCreditCard(c, itemId), nowIso);
+    this.cards.set(itemId, credit);
     for (const a of accounts) {
       upsertAccount(
         this.d.db,
@@ -139,7 +158,56 @@ export class PluggySync {
       setMeta(this.d.db, cursorKey, startedAt.toISOString());
       addIngestResult(total, r);
     }
+    try {
+      await this.syncWalletOf(itemId);
+    } catch (err) {
+      this.d.log.warn({ err: (err as Error).message }, 'falha ao sincronizar cartão/caixinhas (a conta foi sincronizada)');
+    }
     return total;
+  }
+
+  /** Compras do cartão, faturas e investimentos (caixinhas). */
+  private async syncWalletOf(itemId: string): Promise<void> {
+    const nowIso = this.d.now().toISOString();
+    for (const card of this.cards.get(itemId) ?? []) {
+      const startedAt = this.d.now();
+      const cursorKey = `pluggy_card_created_from:${card.id}`;
+      const cursor = getMeta(this.d.db, cursorKey);
+      const txs = cursor
+        ? await this.d.client.listTransactions(card.id, { createdAtFrom: new Date(Date.parse(cursor) - OVERLAP_MS).toISOString() })
+        : await this.d.client.listTransactions(card.id, { dateFrom: addDays(todayLocal(startedAt), -BASELINE_DAYS) });
+      this.saveCardTransactions(txs.map((t) => mapCardTransaction(t, card.id)));
+      setMeta(this.d.db, cursorKey, startedAt.toISOString());
+      try {
+        for (const b of await this.d.client.listBills(card.id)) {
+          upsertBill(
+            this.d.db,
+            {
+              id: b.id,
+              cardId: card.id,
+              dueDate: b.dueDate.slice(0, 10),
+              totalCents: decimalToCents(b.totalAmount),
+              minimumCents: b.minimumPaymentAmount == null ? null : decimalToCents(b.minimumPaymentAmount),
+            },
+            nowIso,
+          );
+        }
+      } catch (err) {
+        this.d.log.warn({ err: (err as Error).message }, 'faturas indisponíveis para este cartão');
+      }
+    }
+    const investments = await this.d.client.listInvestments(itemId);
+    this.d.db.transaction(() => {
+      for (const i of investments) upsertInvestment(this.d.db, mapInvestment(i, itemId), nowIso);
+      pruneInvestments(this.d.db, itemId, investments.map((i) => i.id));
+    })();
+  }
+
+  private saveCardTransactions(txs: ReturnType<typeof mapCardTransaction>[]): void {
+    const nowIso = this.d.now().toISOString();
+    this.d.db.transaction(() => {
+      for (const t of txs) upsertCardTransaction(this.d.db, t, nowIso);
+    })();
   }
 
   private ingest(txs: ReturnType<typeof mapPluggyTransaction>[], notify: boolean): Promise<IngestResult> {

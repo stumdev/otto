@@ -94,6 +94,18 @@ export function generateDay(date: string, opts: { first: boolean }): TxInput[] {
       category: 'Salário',
     });
   }
+  // todo dia 7 guarda dinheiro na caixinha (movimentação interna: fora dos totais)
+  if (day === 7) {
+    drafts.push({
+      hour: 8,
+      minute: 30,
+      amountCents: -60_000,
+      description: 'Guardado na caixinha',
+      counterpart: null,
+      method: 'OTHER',
+      category: 'Caixinha',
+    });
+  }
   // contas fixas
   if (day === 10) {
     drafts.push({
@@ -259,6 +271,7 @@ export function generateDay(date: string, opts: { first: boolean }): TxInput[] {
       method: d.method,
       category: d.category,
       status: 'POSTED',
+      internal: d.category === 'Caixinha',
     };
   });
 }

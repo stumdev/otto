@@ -2,6 +2,17 @@ import type { DB } from '../db/index.js';
 import { getMeta } from '../db/index.js';
 import { dailyTotals, listTransactions, sumAfter, sumRange, totalBalance, type TxRow } from '../db/repo.js';
 import { addDays, localTimeOf, shortDateLabel, todayLocal } from '../lib/time.js';
+import type { Settings } from './settings.js';
+import { buildCards, buildReserves, type CardDto, type ReservesDto } from './wallet.js';
+
+const NO_SETTINGS: Settings = {
+  bigOutflowThresholdCents: 0,
+  dailySummaryTime: '22:00',
+  dailySummaryEnabled: false,
+  notifyIncoming: true,
+  notifyOutgoing: true,
+  cardDueDay: null,
+};
 
 export interface TxDto {
   id: number;
@@ -16,6 +27,8 @@ export interface TxDto {
   method: string | null;
   category: string | null;
   status: string;
+  /** Movimentação com as caixinhas: não entra nos totais de entrada/saída. */
+  internal: boolean;
 }
 
 export function toTxDto(r: TxRow): TxDto {
@@ -34,6 +47,7 @@ export function toTxDto(r: TxRow): TxDto {
     method: r.method,
     category: r.category,
     status: r.status,
+    internal: r.internal === 1,
   };
 }
 
@@ -53,10 +67,12 @@ export interface SummaryDto {
   week: { from: string; to: string; inCents: number; outCents: number; netCents: number };
   series: DayPoint[];
   recent: TxDto[];
+  reserves: ReservesDto;
+  cards: CardDto[];
 }
 
 /** Saldo, entrou/saiu hoje e série dos últimos 7 dias (com saldo de fechamento de cada dia). */
-export function buildSummary(db: DB, now: Date): SummaryDto {
+export function buildSummary(db: DB, now: Date, settings?: Settings): SummaryDto {
   const today = todayLocal(now);
   const from = addDays(today, -6);
   const { balanceCents, updatedAt } = totalBalance(db);
@@ -84,6 +100,9 @@ export function buildSummary(db: DB, now: Date): SummaryDto {
     week: { from, to: today, inCents: week.inCents, outCents: week.outCents, netCents: week.netCents },
     series,
     recent: listTransactions(db, { limit: 3 }).map(toTxDto),
+    reserves: buildReserves(db),
+    // sem ajustes (testes antigos), o vencimento só aparece se o banco informar
+    cards: buildCards(db, settings ?? NO_SETTINGS, now),
   };
 }
 

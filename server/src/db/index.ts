@@ -82,6 +82,74 @@ const MIGRATIONS: string[] = [
   CREATE INDEX idx_tx_fingerprint ON transactions(source_fingerprint);
   CREATE INDEX idx_tx_status ON transactions(status, deleted);
   `,
+  // 3 — caixinhas e cartão de crédito.
+  //     internal = 1: movimentação entre a conta e as caixinhas (dinheiro do próprio dono).
+  //     Aparece na lista e no saldo, mas NÃO conta como entrada/saída nos totais.
+  `
+  ALTER TABLE transactions ADD COLUMN internal INTEGER NOT NULL DEFAULT 0;
+  UPDATE transactions SET internal = 1 WHERE category = 'Caixinha';
+
+  CREATE TABLE investments (
+    id               TEXT PRIMARY KEY,
+    item_id          TEXT,
+    name             TEXT NOT NULL,
+    type             TEXT NOT NULL,
+    subtype          TEXT,
+    status           TEXT,
+    balance_cents    INTEGER NOT NULL DEFAULT 0,  -- saldo líquido (após impostos)
+    rate             REAL,                        -- ex.: 100 (% do CDI)
+    rate_type        TEXT,                        -- ex.: CDI
+    issuer           TEXT,
+    due_date         TEXT,
+    reference_date   TEXT,
+    updated_at       TEXT NOT NULL
+  );
+
+  CREATE TABLE credit_cards (
+    id                     TEXT PRIMARY KEY,
+    item_id                TEXT,
+    name                   TEXT NOT NULL,
+    number                 TEXT,                  -- últimos 4 dígitos
+    brand                  TEXT,
+    level                  TEXT,
+    open_bill_cents        INTEGER NOT NULL DEFAULT 0, -- fatura em aberto
+    credit_limit_cents     INTEGER,
+    available_limit_cents  INTEGER,
+    minimum_payment_cents  INTEGER,
+    close_date             TEXT,
+    due_date               TEXT,
+    updated_at             TEXT NOT NULL
+  );
+
+  CREATE TABLE card_bills (
+    id             TEXT PRIMARY KEY,
+    card_id        TEXT NOT NULL REFERENCES credit_cards(id),
+    due_date       TEXT NOT NULL,                 -- YYYY-MM-DD
+    total_cents    INTEGER NOT NULL,
+    minimum_cents  INTEGER,
+    updated_at     TEXT NOT NULL
+  );
+
+  CREATE TABLE card_transactions (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    external_id         TEXT NOT NULL UNIQUE,
+    card_id             TEXT NOT NULL REFERENCES credit_cards(id),
+    occurred_at         TEXT NOT NULL,
+    local_date          TEXT NOT NULL,
+    amount_cents        INTEGER NOT NULL,         -- > 0 compra/cobrança; < 0 estorno/pagamento
+    description         TEXT NOT NULL,
+    category            TEXT,
+    status              TEXT NOT NULL DEFAULT 'POSTED',
+    bill_month          TEXT,                     -- YYYY-MM da fatura prevista
+    installment_number  INTEGER,
+    total_installments  INTEGER,
+    deleted             INTEGER NOT NULL DEFAULT 0,
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL
+  );
+  CREATE INDEX idx_card_tx_date ON card_transactions(local_date);
+  CREATE INDEX idx_card_tx_bill ON card_transactions(bill_month);
+  `,
 ];
 
 export function openDatabase(path: string): DB {

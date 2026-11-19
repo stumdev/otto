@@ -13,6 +13,8 @@ export interface TxInput {
   method?: string | null;
   category?: string | null;
   status?: string;
+  /** Movimentação com as caixinhas: entra no saldo, não nos totais de entrada/saída. */
+  internal?: boolean;
 }
 
 export interface TxRow {
@@ -29,6 +31,7 @@ export interface TxRow {
   category: string | null;
   status: string;
   source_fingerprint: string | null;
+  internal: number;
 }
 
 export interface AccountRow {
@@ -169,13 +172,14 @@ export function upsertTransaction(db: DB, tx: TxInput, nowIso: string): { insert
     method: tx.method ?? null,
     category: tx.category ?? null,
     status: tx.status ?? 'POSTED',
+    internal: tx.internal ? 1 : 0,
     now: nowIso,
   };
   if (existing) {
     db.prepare(
       `UPDATE transactions SET account_id=@accountId, occurred_at=@occurredAt, local_date=@localDate,
          has_time=@hasTime, amount_cents=@amountCents, description=@description, counterpart=@counterpart,
-         method=@method, category=@category, status=@status, deleted=0, updated_at=@now
+         method=@method, category=@category, status=@status, internal=@internal, deleted=0, updated_at=@now
        WHERE external_id=@externalId`,
     ).run(params);
     return { inserted: false, id: existing.id };
@@ -183,9 +187,9 @@ export function upsertTransaction(db: DB, tx: TxInput, nowIso: string): { insert
   const info = db
     .prepare(
       `INSERT INTO transactions(external_id, account_id, occurred_at, local_date, has_time, amount_cents,
-         description, counterpart, method, category, status, created_at, updated_at)
+         description, counterpart, method, category, status, internal, created_at, updated_at)
        VALUES (@externalId, @accountId, @occurredAt, @localDate, @hasTime, @amountCents,
-         @description, @counterpart, @method, @category, @status, @now, @now)`,
+         @description, @counterpart, @method, @category, @status, @internal, @now, @now)`,
     )
     .run(params);
   return { inserted: true, id: Number(info.lastInsertRowid) };
@@ -220,7 +224,7 @@ export function sumRange(db: DB, range: DateRange): PeriodTotals {
          COALESCE(SUM(CASE WHEN amount_cents < 0 THEN -amount_cents END), 0) AS outC,
          COUNT(CASE WHEN amount_cents > 0 THEN 1 END) AS nIn,
          COUNT(CASE WHEN amount_cents < 0 THEN 1 END) AS nOut
-       FROM transactions WHERE deleted = 0 AND local_date BETWEEN ? AND ?`,
+       FROM transactions WHERE deleted = 0 AND internal = 0 AND local_date BETWEEN ? AND ?`,
     )
     .get(range.from, range.to) as { inC: number; outC: number; nIn: number; nOut: number };
   return { inCents: row.inC, outCents: row.outC, netCents: row.inC - row.outC, countIn: row.nIn, countOut: row.nOut };
@@ -234,7 +238,7 @@ export function dailyTotals(db: DB, range: DateRange): Map<string, PeriodTotals>
          COALESCE(SUM(CASE WHEN amount_cents < 0 THEN -amount_cents END), 0) AS outC,
          COUNT(CASE WHEN amount_cents > 0 THEN 1 END) AS nIn,
          COUNT(CASE WHEN amount_cents < 0 THEN 1 END) AS nOut
-       FROM transactions WHERE deleted = 0 AND local_date BETWEEN ? AND ?
+       FROM transactions WHERE deleted = 0 AND internal = 0 AND local_date BETWEEN ? AND ?
        GROUP BY local_date`,
     )
     .all(range.from, range.to) as { d: string; inC: number; outC: number; nIn: number; nOut: number }[];
@@ -292,7 +296,7 @@ export function topTransactions(db: DB, range: DateRange, direction: 'in' | 'out
   const sign = direction === 'in' ? 'amount_cents > 0' : 'amount_cents < 0';
   return db
     .prepare(
-      `SELECT * FROM transactions WHERE deleted = 0 AND ${sign} AND local_date BETWEEN ? AND ?
+      `SELECT * FROM transactions WHERE deleted = 0 AND internal = 0 AND ${sign} AND local_date BETWEEN ? AND ?
        ORDER BY ${order}, occurred_at DESC LIMIT ?`,
     )
     .all(range.from, range.to, limit) as TxRow[];
@@ -324,7 +328,7 @@ export function searchTransactions(
     const v = `%${escapeLike(t)}%`;
     return [v, v, v];
   });
-  const base = `FROM transactions WHERE deleted = 0 AND local_date BETWEEN ? AND ? AND (${conds})`;
+  const base = `FROM transactions WHERE deleted = 0 AND internal = 0 AND local_date BETWEEN ? AND ? AND (${conds})`;
   const totalsRow = db
     .prepare(
       `SELECT

@@ -8,6 +8,8 @@ export const SettingsSchema = z.object({
   dailySummaryEnabled: z.boolean(),
   notifyIncoming: z.boolean(),
   notifyOutgoing: z.boolean(),
+  /** Dia de vencimento da fatura do cartão (o Nubank não informa pelo Open Finance). null = não definido. */
+  cardDueDay: z.number().int().min(1).max(31).nullable(),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 export const SettingsPatchSchema = SettingsSchema.partial().strict();
@@ -19,6 +21,7 @@ export function defaultSettings(config: Config): Settings {
     dailySummaryEnabled: true,
     notifyIncoming: true,
     notifyOutgoing: true,
+    cardDueDay: null,
   };
 }
 
