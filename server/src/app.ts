@@ -323,7 +323,9 @@ export async function buildApp(opts: AppOptions): Promise<{ app: FastifyInstance
       const body = ChatBody.parse(req.body);
       const turns = body.messages.slice(-CHAT_HISTORY_LIMIT);
       const abort = new AbortController();
-      req.raw.on('close', () => {
+      // Cancela a IA só se o CLIENTE desconectar antes do fim. Atenção: o 'close' da requisição
+      // (req.raw) dispara assim que o corpo foi lido — não serve para isso. O da resposta, sim.
+      reply.raw.on('close', () => {
         if (!reply.raw.writableEnded) abort.abort();
       });
 

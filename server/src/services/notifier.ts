@@ -55,6 +55,7 @@ export function counterpartLabel(tx: {
   description: string;
 }): string {
   const m = methodLabel(tx.method);
+  if (tx.counterpart && tx.method === 'CARTAO') return `Débito em ${tx.counterpart}`;
   if (tx.counterpart) {
     const prep = tx.amountCents > 0 ? 'de' : 'para';
     return `${m ?? (tx.amountCents > 0 ? 'Recebido' : 'Pago')} ${prep} ${tx.counterpart}`;
