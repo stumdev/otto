@@ -37,6 +37,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.tony.BuildConfig
 import app.tony.data.Money
@@ -61,6 +62,11 @@ fun SettingsScreen(onBack: () -> Unit, onEditServer: () -> Unit, onDisconnected:
     var editTime by remember { mutableStateOf(false) }
     var confirmDisconnect by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.messages.collect { toast = it } }
+    // ao voltar da tela do sistema "Acesso a notificações", atualiza o status
+    LifecycleResumeEffect(Unit) {
+        vm.refreshInstantAlerts()
+        onPauseOrDispose { }
+    }
 
     Box(Modifier.fillMaxSize().background(TonyColors.Bg)) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -80,6 +86,10 @@ fun SettingsScreen(onBack: () -> Unit, onEditServer: () -> Unit, onDisconnected:
                     ValueRow("Endereço", state.serverUrl.removePrefix("https://"), onClick = onEditServer)
                     Divider()
                     ValueRow("Token", state.tokenHint, onClick = onEditServer)
+                }
+
+                Section("Alertas instantâneos") {
+                    InstantAlertsContent(state, vm, onMessage = { toast = it })
                 }
 
                 Section("Notificações") {

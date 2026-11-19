@@ -94,21 +94,38 @@ class PushManager @Inject constructor(
         }
         var shown = 0
         for (n in page.items) {
-            if (n.id <= prefs.lastNotificationId) continue
-            Notifications.show(context, n)
-            prefs.lastNotificationId = n.id
-            shown++
+            if (showOnce(n)) shown++
+            // o ponteiro da outbox só avança aqui, em ordem: nada fica para trás
+            if (n.id > prefs.lastNotificationId) prefs.lastNotificationId = n.id
         }
         return shown
     }
 
+    /** Push (FCM) ou resposta do servidor: exibe se ainda não foi exibida. */
     fun showFromPush(n: NotificationDto) {
-        if (n.id > 0 && n.id <= prefs.lastNotificationId) return // já exibida pelo polling
+        showOnce(n)
+    }
+
+    /**
+     * Ponto único de exibição. Push, polling e a resposta da leitura da notificação do banco
+     * podem trazer a mesma notificação quase ao mesmo tempo; o id da outbox garante uma só
+     * (lista persistida dos últimos ids exibidos). Ids <= 0 são avisos locais e sempre aparecem.
+     */
+    @Synchronized
+    private fun showOnce(n: NotificationDto): Boolean {
+        if (n.id > 0) {
+            val shown = prefs.shownNotificationIds
+            if (n.id in shown) return false
+            prefs.shownNotificationIds = (shown + n.id).takeLast(MAX_SHOWN_IDS)
+            // com push ativo o polling fica parado; mantém o ponteiro alinhado para o caso de o FCM cair
+            if (prefs.pushActive) markSeen(n.id)
+        }
         Notifications.show(context, n)
-        if (n.id > 0) markSeen(n.id)
+        return true
     }
 
     private companion object {
         const val TAG = "TonyPush"
+        const val MAX_SHOWN_IDS = 100
     }
 }

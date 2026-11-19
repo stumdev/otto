@@ -8,7 +8,16 @@ import type { FetchLike } from './ai/provider.js';
 import type { Config } from './config.js';
 import type { DB } from './db/index.js';
 import { getMeta, setMeta } from './db/index.js';
-import { lastNotificationId, listNotificationsAfter, listTransactions, sumRange, totalBalance, upsertDevice } from './db/repo.js';
+import {
+  expireProvisionals,
+  lastNotificationId,
+  listNotificationsAfter,
+  listTransactions,
+  sumRange,
+  totalBalance,
+  upsertDevice,
+} from './db/repo.js';
+import { BankNotificationSchema, handleBankNotification } from './services/bankNotification.js';
 import { bearerToken, safeEqual } from './lib/crypto.js';
 import { isDateString, localMinutesOfDay, todayLocal } from './lib/time.js';
 import { MockBank } from './services/mock/mock.js';
@@ -126,6 +135,10 @@ export async function buildApp(opts: AppOptions): Promise<{ app: FastifyInstance
         setMeta(db, 'last_sync_at', now().toISOString());
       } else if (sync) {
         await sync.syncAll();
+        // no modo real, provisória que o agregador nunca confirmou deixa de contar no saldo
+        const cutoff = new Date(now().getTime() - config.PROVISIONAL_TTL_HOURS * 3600_000).toISOString();
+        const expired = expireProvisionals(db, cutoff, now().toISOString());
+        if (expired > 0) app.log.warn({ expired }, 'provisórias expiradas sem confirmação do agregador');
       }
     },
     async dailySummaryTick() {
@@ -256,6 +269,20 @@ export async function buildApp(opts: AppOptions): Promise<{ app: FastifyInstance
     api.post('/v1/sync', { config: { rateLimit: { max: 6, timeWindow: '1 minute' } } }, async () => {
       await services.syncOnce();
       return { ok: true, lastSyncAt: getMeta(db, 'last_sync_at') ?? null };
+    });
+
+    // notificação do app do banco lida no celular -> transação provisória + aviso imediato
+    api.post('/v1/events/bank-notification', { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } }, async (req, reply) => {
+      const body = BankNotificationSchema.parse(req.body);
+      const r = await handleBankNotification(db, notifier, body, settings(), now());
+      if (r.status === 'rejected') return reply.status(422).send({ error: r.reason });
+      const n = r.status === 'created' ? r.notification : null;
+      return {
+        ok: true,
+        status: r.status,
+        balanceCents: r.balanceCents,
+        notification: n ? { id: n.id, kind: n.kind, title: n.title, body: n.body, target: n.target } : null,
+      };
     });
 
     api.post('/v1/devices', async (req) => {

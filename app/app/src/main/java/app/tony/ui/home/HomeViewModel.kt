@@ -5,7 +5,11 @@ import androidx.lifecycle.viewModelScope
 import app.tony.data.Summary
 import app.tony.data.TonyRepository
 import app.tony.data.userMessage
+import android.content.Context
+import app.tony.bank.BankNotificationListener
+import app.tony.data.AppPrefs
 import app.tony.notify.PushManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,12 +26,16 @@ data class HomeState(
     val loading: Boolean = true,
     val refreshing: Boolean = false,
     val error: String? = null,
+    /** Sugere ativar a leitura das notificações do Nubank. */
+    val showInstantHint: Boolean = false,
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repo: TonyRepository,
     private val push: PushManager,
+    private val prefs: AppPrefs,
+    @param:ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeState())
@@ -38,6 +46,19 @@ class HomeViewModel @Inject constructor(
 
     init {
         load()
+    }
+
+    /** Recalculado ao voltar para a tela (o usuário pode ter ativado nas configurações). */
+    fun refreshInstantHint() {
+        val show = !prefs.instantHintDismissed &&
+            !BankNotificationListener.isEnabled(context) &&
+            BankNotificationListener.isBankAppInstalled(context)
+        _state.update { it.copy(showInstantHint = show) }
+    }
+
+    fun dismissInstantHint() {
+        prefs.instantHintDismissed = true
+        _state.update { it.copy(showInstantHint = false) }
     }
 
     fun load() {

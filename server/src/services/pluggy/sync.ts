@@ -4,7 +4,7 @@ import { getMeta, setMeta } from '../../db/index.js';
 import { markTransactionsDeleted, upsertAccount } from '../../db/repo.js';
 import { decimalToCents } from '../../lib/money.js';
 import { addDays, todayLocal } from '../../lib/time.js';
-import { ingestTransactions, type IngestResult } from '../ingest.js';
+import { addIngestResult, emptyIngestResult, ingestTransactions, type IngestResult } from '../ingest.js';
 import type { Notifier } from '../notifier.js';
 import type { Settings } from '../settings.js';
 import type { PluggyAccount, PluggyClient } from './client.js';
@@ -45,12 +45,10 @@ export class PluggySync {
 
   syncAll(): Promise<IngestResult> {
     return this.exclusive(async () => {
-      const total: IngestResult = { inserted: 0, updated: 0, notified: 0 };
+      const total = emptyIngestResult();
       for (const itemId of this.d.itemIds) {
         const r = await this.syncItemUnlocked(itemId);
-        total.inserted += r.inserted;
-        total.updated += r.updated;
-        total.notified += r.notified;
+        addIngestResult(total, r);
       }
       setMeta(this.d.db, 'last_sync_at', this.d.now().toISOString());
       return total;
@@ -68,15 +66,13 @@ export class PluggySync {
   /** transactions/updated: busca pelos ids (até 500 por chamada). */
   refreshTransactions(accountId: string, ids: string[]): Promise<IngestResult> {
     return this.exclusive(async () => {
-      const total: IngestResult = { inserted: 0, updated: 0, notified: 0 };
+      const total = emptyIngestResult();
       const accounts = await this.refreshAccounts();
       if (!accounts.some((a) => a.id === accountId)) return total;
       for (let i = 0; i < ids.length; i += 500) {
         const txs = await this.d.client.listTransactions(accountId, { ids: ids.slice(i, i + 500) });
         const r = await this.ingest(txs.map((t) => mapPluggyTransaction(t, accountId)), true);
-        total.inserted += r.inserted;
-        total.updated += r.updated;
-        total.notified += r.notified;
+        addIngestResult(total, r);
       }
       return total;
     });
@@ -122,7 +118,7 @@ export class PluggySync {
   }
 
   private async syncItemUnlocked(itemId: string): Promise<IngestResult> {
-    const total: IngestResult = { inserted: 0, updated: 0, notified: 0 };
+    const total = emptyIngestResult();
     // 1) saldo primeiro: as notificações mostram o saldo após cada transação
     const accounts = await this.upsertAccountsOf(itemId);
     for (const a of accounts) {
@@ -141,9 +137,7 @@ export class PluggySync {
         r = await this.ingest(txs.map((t) => mapPluggyTransaction(t, a.id)), true);
       }
       setMeta(this.d.db, cursorKey, startedAt.toISOString());
-      total.inserted += r.inserted;
-      total.updated += r.updated;
-      total.notified += r.notified;
+      addIngestResult(total, r);
     }
     return total;
   }

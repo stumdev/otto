@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.tony.BuildConfig
 import app.tony.data.Dates
@@ -91,6 +92,11 @@ fun HomeScreen(
     RequestNotificationPermission()
 
     LaunchedEffect(Unit) { vm.messages.collect { toast = it } }
+    // ao voltar para a tela: atualiza a sugestão de alertas instantâneos
+    LifecycleResumeEffect(Unit) {
+        vm.refreshInstantHint()
+        onPauseOrDispose { }
+    }
     // relógio do "Atualizado há X": recompõe a cada minuto e recarrega com o app aberto
     var tick by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
@@ -129,6 +135,11 @@ fun HomeScreen(
                         onBell = onOpenSettings,
                         onLongPressMark = if (BuildConfig.DEBUG) vm::simulatePix else null,
                     )
+                }
+                if (state.showInstantHint) {
+                    item(key = "instant-hint") {
+                        InstantHintCard(onEnable = onOpenSettings, onDismiss = vm::dismissInstantHint)
+                    }
                 }
                 val s = state.summary
                 when {
@@ -240,6 +251,24 @@ private fun androidx.compose.foundation.lazy.LazyListScope.content(s: Summary, t
     } else {
         items(s.recent, key = { "tx-${it.id}" }) { tx ->
             TxRow(tx.title, tx.subtitle, tx.amountCents, Modifier.clickable(onClick = onOpenTransactions).padding(vertical = 6.dp))
+        }
+    }
+}
+
+@Composable
+private fun InstantHintCard(onEnable: () -> Unit, onDismiss: () -> Unit) {
+    TonyCard(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+        Text("Avisos em segundos", style = TonyType.Section, color = TonyColors.Text)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Deixe o Tony ler as notificações do Nubank neste celular. O Open Finance sozinho pode levar horas.",
+            style = TonyType.Caption,
+            color = TonyColors.Text2,
+        )
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(Modifier.weight(1f)) { app.tony.ui.components.PrimaryButton("Ativar", onClick = onEnable) }
+            Box(Modifier.weight(1f)) { app.tony.ui.components.SecondaryButton("Agora não", onClick = onDismiss) }
         }
     }
 }

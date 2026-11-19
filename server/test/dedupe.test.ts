@@ -29,8 +29,8 @@ describe('deduplicação de notificações', () => {
     const r2 = await ingestTransactions(db, notifier, [t], opts); // webhook repetido / polling
     const r3 = await ingestTransactions(db, notifier, [{ ...t, status: 'PENDING' }], opts); // atualização
 
-    expect(r1).toEqual({ inserted: 1, updated: 0, notified: 1 });
-    expect(r2).toEqual({ inserted: 0, updated: 1, notified: 0 });
+    expect(r1).toEqual({ inserted: 1, updated: 0, notified: 1, matched: 0 });
+    expect(r2).toEqual({ inserted: 0, updated: 1, notified: 0, matched: 0 });
     expect(r3.notified).toBe(0);
     expect(push.sent).toHaveLength(1);
     expect(listNotificationsAfter(db, 0, 10)).toHaveLength(1);
@@ -84,7 +84,7 @@ describe('deduplicação de notificações', () => {
   it('eventos de webhook repetidos (mesmo eventId) são ignorados', async () => {
     const { db, notifier } = setup();
     let calls = 0;
-    const sync = { syncItem: async () => (calls++, { inserted: 0, updated: 0, notified: 0 }) } as unknown as PluggySync;
+    const sync = { syncItem: async () => (calls++, { inserted: 0, updated: 0, notified: 0, matched: 0 }) } as unknown as PluggySync;
     const deps = { db, sync, notifier, log: silentLog, clientId: 'client-1', itemIds: ['item-1'], now: () => new Date() };
     const ev = { event: 'transactions/created', eventId: 'ev-1', clientId: 'client-1', itemId: 'item-1' };
     expect(await processWebhook(deps, ev)).toBe('sincronizado');
