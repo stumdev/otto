@@ -1,0 +1,46 @@
+# --- Segredos (nunca versionar) ---
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.p12
+*.jks
+*.keystore
+keystore.properties
+google-services.json
+firebase-service-account*.json
+
+# --- Banco de dados ---
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+data/
+backups/
+
+# --- Node ---
+node_modules/
+server/dist/
+coverage/
+npm-debug.log*
+
+# --- Android / Gradle ---
+.gradle/
+build/
+app/build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.hprof
+.kotlin/
+
+# --- IDEs / SO ---
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
