@@ -1,0 +1,47 @@
+{
+  "name": "tony-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Servidor do Tony: sincroniza Open Finance (Pluggy), envia push (FCM) e responde o chat com IA.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../.env src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node --env-file-if-exists=../.env dist/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "gen-token": "node -e \"console.log(require('node:crypto').randomBytes(48).toString('base64url'))\"",
+    "setup-qr": "tsx scripts/setup-qr.ts",
+    "pluggy:check": "tsx scripts/pluggy-check.ts",
+    "pluggy:register-webhook": "tsx scripts/pluggy-register-webhook.ts",
+    "backup": "tsx src/cli/backup.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "11.4.0",
+    "@fastify/helmet": "13.2.0",
+    "@fastify/rate-limit": "11.2.2",
+    "better-sqlite3": "13.0.3",
+    "fastify": "5.12.8",
+    "firebase-admin": "14.5.0",
+    "luxon": "3.7.2",
+    "pino": "10.4.0",
+    "qrcode-terminal": "0.12.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "9.6.0",
+    "@types/luxon": "3.7.6",
+    "@types/node": "26.6.6",
+    "@types/qrcode-terminal": "0.12.2",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.3": true,
+    "esbuild@0.28.2": true
+  }
+}
