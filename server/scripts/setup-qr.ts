@@ -4,7 +4,7 @@
  *
  * ATENÇÃO: o QR contém o APP_TOKEN. Não tire print nem compartilhe. Nada é gravado em log.
  *
- * Uso: npm run setup-qr -- https://tony.seudominio.com
+ * Uso: npm run setup-qr -- https://otto.seudominio.com
  */
 import qrcode from 'qrcode-terminal';
 import { loadDotEnv } from './env.js';
@@ -16,6 +16,6 @@ if (!url || !token) {
   console.error('Informe a URL (argumento ou PUBLIC_BASE_URL) e defina APP_TOKEN no .env.');
   process.exit(1);
 }
-const payload = `tony://setup?url=${encodeURIComponent(url)}&token=${encodeURIComponent(token)}`;
+const payload = `otto://setup?url=${encodeURIComponent(url)}&token=${encodeURIComponent(token)}`;
 console.log(`\nServidor: ${url}\nAponte a câmera do app para o código abaixo. Não compartilhe esta tela.\n`);
 qrcode.generate(payload, { small: true });

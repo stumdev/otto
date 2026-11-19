@@ -10,7 +10,18 @@ plugins {
 
 // O FCM só é ligado quando você coloca o google-services.json do seu projeto Firebase aqui
 // (app/app/google-services.json). Sem ele, o app compila e usa notificação local por polling.
-val hasGoogleServices = file("google-services.json").exists()
+// O arquivo precisa conter um app Android com o pacote deste app; senão o plugin do Google Services
+// falha o build ("No matching client found"). Nesse caso seguimos sem FCM e avisamos.
+val appPackage = "app.otto"
+val googleServicesFile = file("google-services.json")
+val hasGoogleServices = googleServicesFile.exists() &&
+    Regex(""""package_name"\s*:\s*"${Regex.escape(appPackage)}"""").containsMatchIn(googleServicesFile.readText())
+if (googleServicesFile.exists() && !hasGoogleServices) {
+    logger.warn(
+        "AVISO: google-services.json não tem o app Android '$appPackage'. FCM desligado neste build " +
+            "(o app usa notificação local). Cadastre '$appPackage' no Firebase e baixe o arquivo de novo.",
+    )
+}
 if (hasGoogleServices) {
     apply(plugin = libs.plugins.google.services.get().pluginId)
 }
@@ -22,11 +33,11 @@ val keystoreProps = Properties().apply {
 }
 
 android {
-    namespace = "app.tony"
+    namespace = appPackage
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "app.tony"
+        applicationId = appPackage
         minSdk = 26
         targetSdk = 37
         versionCode = 1

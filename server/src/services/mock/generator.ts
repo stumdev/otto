@@ -66,7 +66,7 @@ function between(rnd: () => number, minCents: number, maxCents: number): number 
 
 /** Gera as transações de um dia (data local). `first` marca o primeiro dia do histórico. */
 export function generateDay(date: string, opts: { first: boolean }): TxInput[] {
-  const rnd = mulberry32(hashString(`tony-mock:${date}`));
+  const rnd = mulberry32(hashString(`otto-mock:${date}`));
   const day = Number(date.slice(8, 10));
   const drafts: Draft[] = [];
 

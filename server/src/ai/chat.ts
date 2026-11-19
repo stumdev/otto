@@ -36,7 +36,7 @@ const MAX_TOOL_ROUNDS = 5;
 export function systemPrompt(now: Date): string {
   const today = todayLocal(now);
   return [
-    'Você é o Tony, assistente financeiro pessoal que acompanha uma conta bancária.',
+    'Você é o Otto, assistente financeiro pessoal que acompanha uma conta bancária.',
     `Hoje é ${shortDateLabel(today)} (${brDate(today)}, data ${today}), fuso America/Sao_Paulo.`,
     `A semana atual começou na segunda ${startOfWeek(today)}; o mês atual começou em ${startOfMonth(today)}; ontem foi ${addDays(today, -1)}.`,
     '',

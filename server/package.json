@@ -1,8 +1,8 @@
 {
-  "name": "tony-server",
+  "name": "otto-server",
   "version": "1.0.0",
   "private": true,
-  "description": "Servidor do Tony: sincroniza Open Finance (Pluggy), envia push (FCM) e responde o chat com IA.",
+  "description": "Servidor do Otto: sincroniza Open Finance (Pluggy), envia push (FCM) e responde o chat com IA.",
   "type": "module",
   "engines": {
     "node": ">=22.12"

@@ -28,7 +28,7 @@ export async function createFcmSender(file: string | undefined, log: FastifyBase
 
   const { initializeApp, cert } = await import('firebase-admin/app');
   const { getMessaging } = await import('firebase-admin/messaging');
-  const app = initializeApp({ credential: cert(serviceAccount), projectId: serviceAccount['project_id'] }, 'tony');
+  const app = initializeApp({ credential: cert(serviceAccount), projectId: serviceAccount['project_id'] }, 'otto');
   const messaging = getMessaging(app);
   log.info('FCM habilitado');
 

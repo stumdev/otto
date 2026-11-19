@@ -1,30 +1,30 @@
-# Tony — servidor.
+# Otto — servidor.
 #   cp .env.example .env   (preencha APP_TOKEN; MOCK_MODE=true para dados fictícios)
 #   docker compose up -d --build
 #   curl http://127.0.0.1:8080/health
 #
 # Por padrão a porta só escuta em 127.0.0.1 (não fica exposta na rede).
 # Exponha para fora apenas por HTTPS (Caddy ou Cloudflare Tunnel — veja o README).
-# Para testar com o celular na rede local: TONY_BIND=0.0.0.0 docker compose up -d
+# Para testar com o celular na rede local: OTTO_BIND=0.0.0.0 docker compose up -d
 
 services:
-  tony:
+  otto:
     build: ./server
-    image: tony-server:local
+    image: otto-server:local
     restart: unless-stopped
     env_file:
       - path: .env
         required: false
     environment:
-      DATABASE_PATH: /data/tony.db
+      DATABASE_PATH: /data/otto.db
       PORT: "8080"
     ports:
-      - "${TONY_BIND:-127.0.0.1}:8080:8080"
+      - "${OTTO_BIND:-127.0.0.1}:8080:8080"
     volumes:
       - ./data:/data
       # coloque aqui o firebase-service-account.json (opcional) e use
-      # FIREBASE_SERVICE_ACCOUNT_FILE=/run/secrets/tony/firebase-service-account.json
-      - ./secrets:/run/secrets/tony:ro
+      # FIREBASE_SERVICE_ACCOUNT_FILE=/run/secrets/otto/firebase-service-account.json
+      - ./secrets:/run/secrets/otto:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -35,7 +35,7 @@ services:
 
   # Opcional: Cloudflare Tunnel (HTTPS sem abrir portas no roteador).
   # Ative com:  CLOUDFLARE_TUNNEL_TOKEN=... docker compose --profile tunnel up -d
-  # No painel da Cloudflare, aponte o hostname público para http://tony:8080
+  # No painel da Cloudflare, aponte o hostname público para http://otto:8080
   cloudflared:
     image: cloudflare/cloudflared:2026.10.1
     profiles: ["tunnel"]
@@ -44,4 +44,4 @@ services:
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
-      - tony
+      - otto

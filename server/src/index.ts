@@ -33,7 +33,7 @@ async function main(): Promise<void> {
       push: push.enabled ? 'fcm' : 'polling',
       ai: config.aiProviders.map((p) => `${p.name}:${p.model}`).join(',') || 'offline (regras)',
     },
-    'Tony iniciando',
+    'Otto iniciando',
   );
 
   const shutdown = async (signal: string) => {

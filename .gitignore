@@ -16,7 +16,7 @@ firebase-service-account*.json
 *.db-journal
 *.db-wal
 *.db-shm
-# pastas do banco (ancoradas: NÃO confundir com o pacote Kotlin app/tony/data)
+# pastas do banco (ancoradas: NÃO confundir com o pacote Kotlin app/otto/data)
 /data/
 /backups/
 /server/data/
