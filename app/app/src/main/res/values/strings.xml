@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Tony</string>
+    <string name="channel_in">Entradas</string>
+    <string name="channel_in_desc">Pix e valores recebidos</string>
+    <string name="channel_out">Saídas</string>
+    <string name="channel_out_desc">Pix e pagamentos enviados, incluindo alertas de saída grande</string>
+    <string name="channel_summary">Resumo</string>
+    <string name="channel_summary_desc">Resumo diário e avisos da conexão com o banco</string>
+</resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema escuro único. Fundo preto desde o primeiro frame (sem flash branco). -->
+    <style name="Theme.Tony" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/tony_black</item>
+        <item name="android:colorBackground">@color/tony_black</item>
+        <item name="android:colorAccent">@color/tony_white</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
