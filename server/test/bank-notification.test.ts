@@ -13,7 +13,7 @@ import { handleBankNotification, type BankNotificationInput } from '../src/servi
 import { ingestTransactions } from '../src/services/ingest.js';
 import { Notifier } from '../src/services/notifier.js';
 import { defaultSettings } from '../src/services/settings.js';
-import { FakePush, makeConfig, memoryDb, seedAccount, silentLog, TEST_TOKEN, tx } from './helpers.js';
+import { FakePush, makeConfig, memoryDb, seedAccount, silentLog, signupConnected, tx } from './helpers.js';
 
 const settings = defaultSettings(makeConfig());
 const fp = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -148,10 +148,9 @@ describe('notificação do banco lida no celular', () => {
 describe('POST /v1/events/bank-notification', () => {
   it('exige token, valida o corpo e cria a provisória', async () => {
     const push = new FakePush();
-    const { app, services } = await buildApp({ config: makeConfig(), db: memoryDb(), push, logger: false, disableJobs: true });
-    await services.syncOnce();
+    const { app } = await buildApp({ config: makeConfig(), push, logger: false, disableJobs: true });
     const url = '/v1/events/bank-notification';
-    const auth = { authorization: `Bearer ${TEST_TOKEN}` };
+    const auth = (await signupConnected(app)).headers;
     const payload = { ...event(), occurredAt: new Date().toISOString() };
 
     expect((await app.inject({ method: 'POST', url, payload })).statusCode).toBe(401);

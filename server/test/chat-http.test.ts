@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
-import { makeConfig, memoryDb, TEST_TOKEN } from './helpers.js';
+import { makeConfig, signupConnected } from './helpers.js';
 
 /**
  * Regressão: com um socket HTTP de verdade, o evento 'close' da REQUISIÇÃO dispara logo
@@ -10,6 +10,7 @@ import { makeConfig, memoryDb, TEST_TOKEN } from './helpers.js';
  */
 let app: FastifyInstance;
 let base: string;
+let auth: { authorization: string };
 
 // provedor de IA falso (o servidor chama via fetchImpl), respondendo em SSE
 // 1ª chamada: a IA pede a ferramenta; 2ª: responde. Com latência de rede realista.
@@ -29,13 +30,12 @@ const fakeAi = (async (_url: string | URL | Request, init?: RequestInit) => {
 beforeAll(async () => {
   const built = await buildApp({
     config: makeConfig({ GROQ_API_KEY: 'gsk_fake', AI_PROVIDER_ORDER: 'groq' }),
-    db: memoryDb(),
     logger: false,
     disableJobs: true,
     fetchImpl: fakeAi,
   });
   app = built.app;
-  await built.services.syncOnce();
+  auth = (await signupConnected(app)).headers;
   await app.listen({ host: '127.0.0.1', port: 0 });
   const addr = app.server.address();
   if (!addr || typeof addr === 'string') throw new Error('sem porta');
@@ -49,13 +49,13 @@ describe('chat por HTTP real', () => {
   it('entrega a resposta completa da IA em streaming', async () => {
     const r = await fetch(`${base}/v1/chat`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${TEST_TOKEN}`, 'content-type': 'application/json' },
+      headers: { ...auth, 'content-type': 'application/json' },
       body: JSON.stringify({ messages: [{ role: 'user', content: 'quanto entrou hoje?' }] }),
     });
     expect(r.status).toBe(200);
     expect(r.headers.get('content-type')).toMatch(/text\/event-stream/);
     const body = await r.text();
-    expect(body).toContain('event: meta\ndata: {"mode":"ai","provider":"groq"}');
+    expect(body).toMatch(/event: meta\ndata: \{"mode":"ai","provider":"groq","model":"[^"]+"\}/);
     const text = [...body.matchAll(/event: delta\ndata: (.*)/g)].map((m) => JSON.parse(m[1]!).text).join('');
     expect(text).toBe('Entrou **R$ 10,00** hoje.');
     expect(body.trim().endsWith('event: done\ndata: {}')).toBe(true);

@@ -49,18 +49,22 @@ import app.otto.ui.components.OttoIcons
 import app.otto.ui.components.OttoTextField
 import app.otto.ui.components.ToggleRow
 import app.otto.ui.components.TransientMessage
+import app.otto.ui.components.RowIcon
 import app.otto.ui.components.ValueRow
+import app.otto.ui.components.enterAnimation
 import app.otto.ui.theme.OttoColors
 import app.otto.ui.theme.OttoType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onEditServer: () -> Unit, onDisconnected: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
+fun SettingsScreen(onBack: () -> Unit, onBankDisconnected: () -> Unit, vm: SettingsViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     var toast by remember { mutableStateOf<String?>(null) }
     var editThreshold by remember { mutableStateOf(false) }
     var editTime by remember { mutableStateOf(false) }
-    var confirmDisconnect by remember { mutableStateOf(false) }
+    var confirmSignOut by remember { mutableStateOf(false) }
+    var confirmDisconnectBank by remember { mutableStateOf(false) }
+    var deleteAccount by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.messages.collect { toast = it } }
     // ao voltar da tela do sistema "Acesso a notificações", atualiza o status
     LifecycleResumeEffect(Unit) {
@@ -82,76 +86,116 @@ fun SettingsScreen(onBack: () -> Unit, onEditServer: () -> Unit, onDisconnected:
                     .navigationBarsPadding()
                     .padding(horizontal = ScreenPadding, vertical = 8.dp),
             ) {
-                Section("Servidor") {
-                    ValueRow("Endereço", state.serverUrl.removePrefix("https://"), onClick = onEditServer)
+                Section(
+                    "Sua conta",
+                    "Você está conectado com este e-mail.",
+                    index = 0,
+                ) {
+                    InfoRow(OttoIcons.User, "E-mail", state.email)
                     Divider()
-                    ValueRow("Token", state.tokenHint, onClick = onEditServer)
+                    ValueRow(
+                        "Sair da conta",
+                        "",
+                        onClick = { confirmSignOut = true },
+                        subtitle = "Você entra de novo com e-mail e senha",
+                        icon = OttoIcons.LogOut,
+                    )
                 }
 
-                Section("Alertas instantâneos") {
+                Section(
+                    "Avisos em segundos",
+                    "O Otto lê as notificações do app do Nubank neste celular e te avisa na hora, sem esperar o Open Finance.",
+                    index = 1,
+                ) {
                     InstantAlertsContent(state, vm, onMessage = { toast = it })
                 }
 
-                Section("Notificações") {
+                Section(
+                    "Notificações",
+                    "Escolha o que o Otto avisa e quando.",
+                    index = 2,
+                ) {
                     val s = state.settings
                     if (s == null) {
                         Text(state.error ?: "Carregando…", style = OttoType.Caption, color = OttoColors.Text2, modifier = Modifier.padding(vertical = 12.dp))
                     } else {
+                        ToggleRow("Avisar entradas", "Uma notificação a cada dinheiro que entra", s.notifyIncoming, vm::setNotifyIncoming, icon = OttoIcons.Bell)
+                        Divider()
+                        ToggleRow("Avisar saídas", "Uma notificação a cada pagamento ou Pix enviado", s.notifyOutgoing, vm::setNotifyOutgoing, icon = OttoIcons.Bell)
+                        Divider()
                         ValueRow(
                             "Alerta de saída grande",
-                            if (s.bigOutflowThresholdCents == 0L) "Desligado" else "≥ ${Money.brl(s.bigOutflowThresholdCents)}",
+                            "",
                             onClick = { editThreshold = true },
+                            subtitle = if (s.bigOutflowThresholdCents == 0L) "Desligado" else "Destaca a notificação quando sair ${Money.brl(s.bigOutflowThresholdCents)} ou mais",
+                            icon = OttoIcons.Zap,
                         )
                         Divider()
-                        ToggleRow("Resumo diário", "Entrou, saiu e saldo do dia", s.dailySummaryEnabled, vm::setSummaryEnabled)
+                        ToggleRow("Resumo do dia", "Uma notificação por dia com o que entrou, saiu e o saldo", s.dailySummaryEnabled, vm::setSummaryEnabled, icon = OttoIcons.Chat)
                         if (s.dailySummaryEnabled) {
                             Divider()
-                            ValueRow("Horário do resumo", s.dailySummaryTime, onClick = { editTime = true })
+                            ValueRow("Horário do resumo", s.dailySummaryTime, onClick = { editTime = true }, subtitle = "Quando o resumo chega", icon = OttoIcons.Chat)
                         }
-                        Divider()
-                        ToggleRow("Avisar entradas", null, s.notifyIncoming, vm::setNotifyIncoming)
-                        Divider()
-                        ToggleRow("Avisar saídas", null, s.notifyOutgoing, vm::setNotifyOutgoing)
                     }
+                    if (!state.pushActive) {
+                        Divider()
+                        Text(
+                            "Os avisos chegam com o app aberto ou a cada poucos minutos. Para chegarem na hora com o app fechado, o servidor precisa do push ativado.",
+                            style = OttoType.Small,
+                            color = OttoColors.Text2,
+                            modifier = Modifier.padding(vertical = 12.dp),
+                        )
+                    }
+                }
+
+                Section(
+                    "Segurança",
+                    "Proteja o que aparece na tela do Otto.",
+                    index = 3,
+                ) {
+                    ToggleRow("Bloqueio ao abrir", "Pede digital, rosto ou PIN para abrir o app", state.biometric, vm::setBiometric, icon = OttoIcons.Lock)
                     Divider()
-                    Text(
-                        when {
-                            state.pushActive -> "Entrega: push (Firebase Cloud Messaging)"
-                            !state.fcmInApp -> "Entrega: notificação local (o app consulta o servidor). Para push instantâneo, configure o Firebase — veja o README."
-                            else -> "Entrega: notificação local. O servidor ainda não tem o Firebase configurado."
-                        },
-                        style = OttoType.Caption,
-                        color = OttoColors.Text2,
-                        modifier = Modifier.padding(vertical = 12.dp),
+                    ToggleRow("Proteger a tela", "Bloqueia prints e esconde o app na lista de recentes", state.secureScreen, vm::setSecureScreen, icon = OttoIcons.Shield)
+                }
+
+                Section(
+                    "Seus dados",
+                    "Você decide o que fica guardado.",
+                    index = 4,
+                ) {
+                    ValueRow(
+                        "Apagar conversas do chat",
+                        "",
+                        onClick = vm::clearChat,
+                        subtitle = "Remove o histórico guardado neste celular",
+                        icon = OttoIcons.Chat,
                     )
-                    SecondaryButton("Testar notificação", onClick = vm::testNotification, icon = OttoIcons.Bell)
-                    Spacer(Modifier.height(8.dp))
-                }
-
-                Section("Segurança") {
-                    ToggleRow("Bloqueio por biometria", "Pede digital, rosto ou PIN ao abrir", state.biometric, vm::setBiometric)
                     Divider()
-                    ToggleRow("Proteger a tela", "Impede capturas e esconde a prévia em Recentes", state.secureScreen, vm::setSecureScreen)
-                }
-
-                Section("Privacidade") {
-                    ValueRow("Apagar histórico do chat", "", onClick = vm::clearChat)
+                    ValueRow(
+                        "Desconectar o Nubank",
+                        "",
+                        onClick = { confirmDisconnectBank = true },
+                        subtitle = "Apaga os dados importados e revoga a autorização",
+                        icon = OttoIcons.Bank,
+                    )
                     Divider()
-                    ValueRow("Desconectar deste servidor", "", onClick = { confirmDisconnect = true })
-                }
-
-                state.status?.let { st ->
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        buildString {
-                            append("Otto ${BuildConfig.VERSION_NAME} · servidor ${st.version}")
-                            append(if (st.mode == "mock") " · dados fictícios (mock)" else " · dados reais")
-                            append(if (st.ai == "ai") " · IA: ${st.aiProviders.joinToString(" → ")}" else " · IA offline (regras)")
-                        },
-                        style = OttoType.Small,
-                        color = OttoColors.Text2,
+                    ValueRow(
+                        "Excluir minha conta",
+                        "",
+                        onClick = { deleteAccount = true },
+                        subtitle = "Apaga a conta e tudo o que o Otto guarda sobre você",
+                        icon = OttoIcons.Trash,
                     )
                 }
+
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    "Otto ${BuildConfig.VERSION_NAME}",
+                    style = OttoType.Small,
+                    color = OttoColors.Text2,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
                 Spacer(Modifier.height(32.dp))
             }
         }
@@ -202,22 +246,92 @@ fun SettingsScreen(onBack: () -> Unit, onEditServer: () -> Unit, onDisconnected:
             dismissButton = { TextButton(onClick = { editTime = false }) { Text("Cancelar", color = OttoColors.Text2) } },
         )
     }
-    if (confirmDisconnect) {
-        AlertDialog(
-            onDismissRequest = { confirmDisconnect = false },
-            containerColor = OttoColors.Elevated,
-            title = { Text("Desconectar?", style = OttoType.Title, color = OttoColors.Text) },
-            text = { Text("O endereço, o token e o histórico do chat serão apagados deste aparelho.", style = OttoType.Body, color = OttoColors.Text3) },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmDisconnect = false
-                    vm.disconnect()
-                    onDisconnected()
-                }) { Text("Desconectar", color = OttoColors.Text) }
+    if (confirmSignOut) {
+        ConfirmDialog(
+            title = "Sair da conta?",
+            body = "Você precisará entrar de novo com e-mail e senha. O histórico do chat será apagado deste aparelho.",
+            confirm = "Sair",
+            onDismiss = { confirmSignOut = false },
+            onConfirm = {
+                confirmSignOut = false
+                vm.signOut()
             },
-            dismissButton = { TextButton(onClick = { confirmDisconnect = false }) { Text("Cancelar", color = OttoColors.Text2) } },
         )
     }
+    if (confirmDisconnectBank) {
+        ConfirmDialog(
+            title = "Desconectar o Nubank?",
+            body = "Os dados importados serão apagados e a autorização do Open Finance será revogada. Sua conta do Otto continua; você pode conectar de novo quando quiser.",
+            confirm = "Desconectar",
+            onDismiss = { confirmDisconnectBank = false },
+            onConfirm = {
+                confirmDisconnectBank = false
+                vm.disconnectBank(onDone = onBankDisconnected)
+            },
+        )
+    }
+    if (deleteAccount) {
+        DeleteAccountDialog(
+            onDismiss = { deleteAccount = false },
+            onConfirm = { password, onError ->
+                vm.deleteAccount(password) { msg ->
+                    onError(msg)
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun ConfirmDialog(title: String, body: String, confirm: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = OttoColors.Elevated,
+        title = { Text(title, style = OttoType.Title, color = OttoColors.Text) },
+        text = { Text(body, style = OttoType.Body, color = OttoColors.Text3) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(confirm, color = OttoColors.Text) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar", color = OttoColors.Text2) } },
+    )
+}
+
+@Composable
+private fun DeleteAccountDialog(onDismiss: () -> Unit, onConfirm: (String, (String) -> Unit) -> Unit) {
+    var password by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = OttoColors.Elevated,
+        title = { Text("Excluir minha conta", style = OttoType.Title, color = OttoColors.Text) },
+        text = {
+            Column {
+                Text(
+                    "Isso apaga sua conta e todos os seus dados no servidor, e revoga a conexão com o Nubank. Não dá para desfazer. Digite sua senha para confirmar.",
+                    style = OttoType.Caption,
+                    color = OttoColors.Text2,
+                )
+                Spacer(Modifier.height(16.dp))
+                OttoTextField(
+                    value = password,
+                    onValueChange = {
+                        password = it
+                        error = null
+                    },
+                    label = "Senha",
+                    password = true,
+                    imeAction = ImeAction.Done,
+                    onDone = { if (password.isNotEmpty()) onConfirm(password) { error = it } },
+                )
+                error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = OttoType.Caption, color = OttoColors.Text)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (password.isNotEmpty()) onConfirm(password) { error = it } }) { Text("Excluir", color = OttoColors.Text) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar", color = OttoColors.Text2) } },
+    )
 }
 
 @Composable
@@ -261,14 +375,32 @@ private fun ThresholdDialog(initialCents: Long, onDismiss: () -> Unit, onSave: (
 }
 
 @Composable
-private fun Section(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Text(
-        title,
-        style = OttoType.Caption,
-        color = OttoColors.Text2,
-        modifier = Modifier.padding(start = 4.dp, top = 20.dp, bottom = 8.dp).semantics { heading() },
-    )
-    OttoCard(Modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 4.dp), content = content)
+private fun Section(title: String, description: String? = null, index: Int = 0, content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().enterAnimation(index)) {
+        Text(
+            title,
+            style = OttoType.Section,
+            color = OttoColors.Text,
+            modifier = Modifier.padding(start = 4.dp, top = 28.dp, bottom = if (description == null) 10.dp else 2.dp).semantics { heading() },
+        )
+        if (description != null) {
+            Text(description, style = OttoType.Caption, color = OttoColors.Text2, modifier = Modifier.padding(start = 4.dp, bottom = 12.dp))
+        }
+        OttoCard(Modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp, vertical = 4.dp), content = content)
+    }
+}
+
+/** Linha só de leitura (sem seta): ícone, rótulo e valor. */
+@Composable
+private fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        RowIcon(icon)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(label, style = OttoType.Caption, color = OttoColors.Text2)
+            Text(value, style = OttoType.Body, color = OttoColors.Text, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+        }
+    }
 }
 
 @Composable

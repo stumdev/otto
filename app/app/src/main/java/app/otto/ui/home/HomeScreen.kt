@@ -25,7 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,7 +65,9 @@ import app.otto.ui.components.ScreenPadding
 import app.otto.ui.components.SectionHeader
 import app.otto.ui.components.Skeleton
 import app.otto.ui.components.Sparkline
-import app.otto.ui.components.StatusLine
+import app.otto.ui.components.bounceClick
+import app.otto.ui.components.enterAnimation
+import app.otto.ui.components.rememberAnimatedCents
 import app.otto.ui.components.OttoCard
 import app.otto.ui.components.OttoIcons
 import app.otto.ui.components.OttoMark
@@ -184,23 +186,24 @@ fun HomeScreen(
 
 @Composable
 private fun Header(dateLabel: String, onBell: () -> Unit, onLongPressMark: (() -> Unit)?) {
-    Row(Modifier.fillMaxWidth().padding(bottom = 28.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(bottom = 28.dp).enterAnimation(0), verticalAlignment = Alignment.CenterVertically) {
         OttoMark(40.dp, onLongPress = onLongPressMark)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text("Otto", style = OttoType.Title, color = OttoColors.Text, modifier = Modifier.semantics { heading() })
             Text(dateLabel, style = OttoType.Caption, color = OttoColors.Text2)
         }
-        CircleIconButton(OttoIcons.Bell, "Notificações e ajustes", onClick = onBell)
+        CircleIconButton(OttoIcons.Gear, "Ajustes", onClick = onBell)
     }
 }
 
 private fun androidx.compose.foundation.lazy.LazyListScope.content(s: Summary, tick: Int, onOpenTransactions: () -> Unit) {
     item(key = "balance") {
-        Column(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().enterAnimation(1)) {
             Text("Saldo na conta", style = OttoType.Label, color = OttoColors.Text2)
             Spacer(Modifier.height(6.dp))
-            val balance = Money.brl(s.balanceCents).let { if (s.balanceCents < 0) "${Money.MINUS} $it" else it }
+            val shown = rememberAnimatedCents(s.balanceCents)
+            val balance = Money.brl(shown).let { if (shown < 0) "${Money.MINUS} $it" else it }
             BasicText(
                 text = balance,
                 style = OttoType.Balance.copy(color = OttoColors.Text),
@@ -209,13 +212,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.content(s: Summary, t
                 modifier = Modifier.semantics { contentDescription = "Saldo na conta: $balance" },
             )
             Spacer(Modifier.height(8.dp))
-            // `tick` força a atualização do texto relativo a cada minuto
-            val updated = remember(s.lastSyncAt, tick) { Dates.relative(s.lastSyncAt ?: s.balanceUpdatedAt) }
-            StatusLine("Atualizado $updated")
         }
     }
     item(key = "cards") {
-        Row(Modifier.fillMaxWidth().padding(top = 28.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth().padding(top = 28.dp).enterAnimation(2), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OttoCard(Modifier.weight(1f)) {
                 Text("Entrou hoje", style = OttoType.Caption, color = OttoColors.Text2)
                 Spacer(Modifier.height(8.dp))
@@ -229,7 +229,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.content(s: Summary, t
         }
     }
     item(key = "chart") {
-        OttoCard(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        OttoCard(Modifier.fillMaxWidth().padding(top = 12.dp).enterAnimation(3)) {
             Text("Últimos 7 dias", style = OttoType.Caption, color = OttoColors.Text2)
             Spacer(Modifier.height(12.dp))
             Sparkline(
@@ -245,13 +245,13 @@ private fun androidx.compose.foundation.lazy.LazyListScope.content(s: Summary, t
         }
     }
     item(key = "tx-header") {
-        SectionHeader("Movimentações", Modifier.padding(top = 28.dp, bottom = 4.dp), action = "Ver tudo", onAction = onOpenTransactions)
+        SectionHeader("Movimentações", Modifier.padding(top = 28.dp, bottom = 4.dp).enterAnimation(4), action = "Ver tudo", onAction = onOpenTransactions)
     }
     if (s.recent.isEmpty()) {
         item(key = "empty") { MessageState("Nenhuma movimentação ainda", "Elas aparecem aqui assim que chegarem.") }
     } else {
-        items(s.recent, key = { "tx-${it.id}" }) { tx ->
-            TxRow(tx.title, tx.subtitle, tx.amountCents, Modifier.clickable(onClick = onOpenTransactions).padding(vertical = 6.dp))
+        itemsIndexed(s.recent, key = { _, it -> "tx-${it.id}" }) { i, tx ->
+            TxRow(tx.title, tx.subtitle, tx.amountCents, Modifier.enterAnimation(5 + i).bounceClick(role = null, pressedScale = 0.98f, onClick = onOpenTransactions).padding(vertical = 6.dp))
         }
     }
 }

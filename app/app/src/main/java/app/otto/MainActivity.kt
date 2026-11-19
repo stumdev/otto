@@ -94,7 +94,7 @@ class MainActivity : FragmentActivity() {
                 val nav = rememberNavController()
 
                 Box(Modifier.fillMaxSize().background(OttoColors.Bg)) {
-                    OttoNavHost(nav, configured = config.isConfigured, pendingTarget = if (locked) null else target, onTargetConsumed = { pendingTarget.value = null })
+                    OttoNavHost(nav, signedIn = config.isSignedIn, bankConnected = config.bankConnected, pendingTarget = if (locked) null else target, onTargetConsumed = { pendingTarget.value = null })
                     InAppBanner(onOpen = { t -> pendingTarget.value = t })
                     if (locked && config.biometricEnabled && config.isConfigured) {
                         LockScreen(lockMessage) { lock.prompt(this@MainActivity) { lockMessage = it } }

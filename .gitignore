@@ -47,3 +47,6 @@ captures/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# --- Logs ---
+*.log

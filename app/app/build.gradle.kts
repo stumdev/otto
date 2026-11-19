@@ -26,6 +26,16 @@ if (hasGoogleServices) {
     apply(plugin = libs.plugins.google.services.get().pluginId)
 }
 
+// Endereço do servidor do Otto, embutido no app (o usuário nunca digita isso).
+// Defina em app/local.properties (fora do git):  otto.serverUrl=https://api.seudominio.com
+// ou com -Potto.serverUrl=... . No debug o padrão é o emulador (http://10.0.2.2:8080).
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val configuredServerUrl: String? =
+    (providers.gradleProperty("otto.serverUrl").orNull ?: localProps.getProperty("otto.serverUrl"))?.trim()?.trimEnd('/')?.takeIf { it.isNotEmpty() }
+
 // Assinatura de release: crie app/keystore.properties (fora do git). Veja o README.
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore.properties")
@@ -45,6 +55,7 @@ android {
         buildConfigField("boolean", "FCM_CONFIGURED", hasGoogleServices.toString())
     }
 
+
     signingConfigs {
         if (keystoreProps.getProperty("storeFile") != null) {
             create("release") {
@@ -59,8 +70,10 @@ android {
     buildTypes {
         debug {
             isMinifyEnabled = false
+            buildConfigField("String", "SERVER_URL", "\"${configuredServerUrl ?: "http://10.0.2.2:8080"}\"")
         }
         release {
+            buildConfigField("String", "SERVER_URL", "\"${configuredServerUrl.orEmpty()}\"")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
@@ -91,6 +104,17 @@ android {
     }
 }
 
+// O release sem endereço de servidor não funcionaria: falha cedo, com a explicação.
+gradle.taskGraph.whenReady {
+    val releaseBuild = allTasks.any { it.project == project && Regex("(assemble|bundle|package)Release").containsMatchIn(it.name) }
+    if (releaseBuild && configuredServerUrl == null) {
+        throw GradleException("Defina otto.serverUrl (https://...) em app/local.properties antes de gerar o release.")
+    }
+    if (releaseBuild && configuredServerUrl != null && !configuredServerUrl.startsWith("https://")) {
+        throw GradleException("otto.serverUrl precisa ser https:// no release.")
+    }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
@@ -116,7 +140,6 @@ dependencies {
 
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)
-    implementation(libs.play.services.code.scanner)
 
     implementation(libs.retrofit)
     implementation(libs.retrofit.kotlinx.serialization)

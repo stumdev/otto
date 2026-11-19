@@ -26,6 +26,7 @@ import app.otto.BuildConfig
 import app.otto.bank.ListenerSettings
 import app.otto.data.Dates
 import app.otto.ui.components.SecondaryButton
+import app.otto.ui.components.OttoIcons
 import app.otto.ui.components.ValueRow
 import app.otto.ui.theme.OttoColors
 import app.otto.ui.theme.OttoType
@@ -42,9 +43,9 @@ fun InstantAlertsContent(state: SettingsState, vm: SettingsViewModel, onMessage:
     Column(Modifier.padding(vertical = 12.dp)) {
         Text(
             when {
-                !state.bankAppInstalled -> "App do Nubank não encontrado neste celular. Os alertas instantâneos leem as notificações dele."
-                state.listenerEnabled -> "Ativo. O Otto lê só as notificações do Nubank e avisa em segundos, com o saldo. A movimentação fica como “a confirmar” até chegar pelo Open Finance."
-                else -> "Desligado. Ative para receber os avisos em segundos, em vez de esperar o Open Finance (que pode levar horas)."
+                !state.bankAppInstalled -> "Não encontramos o app do Nubank neste celular. Ele é necessário para os avisos em segundos."
+                state.listenerEnabled -> "Ligado. O Otto só lê as notificações do Nubank. A movimentação aparece como “a confirmar” até o Open Finance confirmar."
+                else -> "Desligado. Ligue para ser avisado em segundos, em vez de esperar horas pelo Open Finance."
             },
             style = OttoType.Caption,
             color = OttoColors.Text2,
@@ -59,7 +60,7 @@ fun InstantAlertsContent(state: SettingsState, vm: SettingsViewModel, onMessage:
         }
     }
     if (!state.listenerEnabled) {
-        SecondaryButton("Ativar acesso a notificações", onClick = { ListenerSettings.openNotificationAccess(context) })
+        SecondaryButton("Ligar avisos em segundos", onClick = { ListenerSettings.openNotificationAccess(context) })
         Spacer(Modifier.height(8.dp))
         Text(
             "Se a opção aparecer bloqueada (Android 13+, app instalado fora da loja): abra as informações do app, toque em ⋮ e em “Permitir configurações restritas”. Depois volte e ative.",
@@ -71,17 +72,19 @@ fun InstantAlertsContent(state: SettingsState, vm: SettingsViewModel, onMessage:
         Spacer(Modifier.height(12.dp))
     } else {
         HorizontalDivider(color = OttoColors.Border, thickness = 1.dp)
-        ValueRow("Desativar", "", onClick = { ListenerSettings.openNotificationAccess(context) })
+        ValueRow("Desligar avisos em segundos", "", onClick = { ListenerSettings.openNotificationAccess(context) }, subtitle = "Abre a tela do Android onde o acesso é controlado", icon = OttoIcons.Zap)
     }
     HorizontalDivider(color = OttoColors.Border, thickness = 1.dp)
     ValueRow(
-        "Notificações não reconhecidas",
+        "Notificações ignoradas",
         if (unrecognized.isEmpty()) "nenhuma" else unrecognized.size.toString(),
         onClick = { showDiag = true },
+        subtitle = "Avisos do Nubank que o Otto não conseguiu entender",
+        icon = OttoIcons.Shield,
     )
     if (BuildConfig.DEBUG) {
         HorizontalDivider(color = OttoColors.Border, thickness = 1.dp)
-        ValueRow("Simular notificação do Nubank", "teste", onClick = vm::simulateBankNotification)
+        ValueRow("Simular notificação do Nubank", "teste", onClick = vm::simulateBankNotification, icon = OttoIcons.Zap)
     }
 
     if (showDiag) {

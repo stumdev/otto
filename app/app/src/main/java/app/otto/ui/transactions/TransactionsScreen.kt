@@ -106,7 +106,7 @@ fun TransactionsScreen(onBack: () -> Unit, vm: TransactionsViewModel = hiltViewM
                             }
                             txs.forEach { tx ->
                                 item(key = "t-${tx.id}") {
-                                    TxRow(tx.title, tx.subtitle, tx.amountCents, Modifier.padding(vertical = 6.dp))
+                                    TxRow(tx.title, tx.subtitle, tx.amountCents, Modifier.animateItem().padding(vertical = 6.dp))
                                 }
                             }
                         }

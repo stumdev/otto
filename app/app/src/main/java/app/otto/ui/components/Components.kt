@@ -2,7 +2,9 @@ package app.otto.ui.components
 
 import android.os.Build
 import android.view.HapticFeedbackConstants
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -27,6 +29,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -42,6 +45,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -113,14 +118,15 @@ fun CircleIconButton(
 ) {
     val bg = if (filled) OttoColors.Text else Color.Transparent
     val fg = if (filled) OttoColors.OnPrimary else OttoColors.Text
+    val enabledAlpha by animateFloatAsState(if (enabled) 1f else 0.4f, tween(200), label = "enabled")
     Box(
         modifier
             .size(size)
             .clip(CircleShape)
             .background(bg)
             .then(if (filled) Modifier else Modifier.border(1.dp, OttoColors.Border2, CircleShape))
-            .alpha(if (enabled) 1f else 0.4f)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .alpha(enabledAlpha)
+            .bounceClick(enabled = enabled, onClick = onClick)
             .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
@@ -199,12 +205,16 @@ fun TxRow(title: String, subtitle: String, amountCents: Long, modifier: Modifier
 @Composable
 fun Skeleton(modifier: Modifier = Modifier, shape: RoundedCornerShape = RoundedCornerShape(10.dp)) {
     val t = rememberInfiniteTransition(label = "skeleton")
-    val a by t.animateFloat(0.55f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "alpha")
+    val x by t.animateFloat(-400f, 1400f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "shimmer")
+    val brush = Brush.linearGradient(
+        colors = listOf(OttoColors.Elevated, OttoColors.Border2, OttoColors.Elevated),
+        start = Offset(x, 0f),
+        end = Offset(x + 420f, 120f),
+    )
     Box(
         modifier
-            .alpha(a)
             .clip(shape)
-            .background(OttoColors.Elevated),
+            .background(brush),
     )
 }
 
@@ -232,7 +242,7 @@ fun SectionHeader(title: String, modifier: Modifier = Modifier, action: String? 
                 Modifier
                     .heightIn(min = 48.dp)
                     .clip(PillShape)
-                    .clickable(role = Role.Button, onClick = onAction)
+                    .bounceClick(onClick = onAction)
                     .padding(horizontal = 8.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -291,7 +301,7 @@ fun Chip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabl
             .heightIn(min = 40.dp)
             .clip(PillShape)
             .border(1.dp, OttoColors.Border2, PillShape)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .bounceClick(enabled = enabled, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -307,7 +317,7 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
             .heightIn(min = 52.dp)
             .clip(PillShape)
             .background(if (enabled) OttoColors.Text else OttoColors.Elevated)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .bounceClick(enabled = enabled, pressedScale = 0.97f, onClick = onClick)
             .padding(horizontal = 20.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -323,7 +333,7 @@ fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modi
             .heightIn(min = 52.dp)
             .clip(PillShape)
             .border(1.dp, OttoColors.Border2, PillShape)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .bounceClick(enabled = enabled, pressedScale = 0.97f, onClick = onClick)
             .padding(horizontal = 20.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
@@ -383,16 +393,41 @@ fun OttoTextField(
     }
 }
 
+/** Ícone num círculo suave, usado nas linhas dos Ajustes. */
 @Composable
-fun ToggleRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+fun RowIcon(icon: ImageVector, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(OttoColors.Elevated),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = OttoColors.Text, modifier = Modifier.size(18.dp))
+    }
+}
+
+@Composable
+fun ToggleRow(
+    title: String,
+    subtitle: String?,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+) {
     Row(
         modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .clickable(role = Role.Switch) { onChange(!checked) }
-            .padding(vertical = 8.dp),
+            .heightIn(min = 60.dp)
+            .bounceClick(role = Role.Switch, pressedScale = 0.985f) { onChange(!checked) }
+            .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (icon != null) {
+            RowIcon(icon)
+            Spacer(Modifier.width(14.dp))
+        }
         Column(Modifier.weight(1f)) {
             Text(title, style = OttoType.Body, color = OttoColors.Text)
             if (subtitle != null) Text(subtitle, style = OttoType.Caption, color = OttoColors.Text2)
@@ -413,19 +448,36 @@ fun ToggleRow(title: String, subtitle: String?, checked: Boolean, onChange: (Boo
     }
 }
 
-/** Linha de ajuste clicável: título, valor e chevron. */
+/** Linha de ajuste clicável: ícone, título, descrição, valor atual e chevron. */
 @Composable
-fun ValueRow(title: String, value: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun ValueRow(
+    title: String,
+    value: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    icon: ImageVector? = null,
+) {
     Row(
         modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(vertical = 8.dp),
+            .heightIn(min = 60.dp)
+            .bounceClick(pressedScale = 0.985f, onClick = onClick)
+            .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = OttoType.Body, color = OttoColors.Text, modifier = Modifier.weight(1f))
-        Text(value, style = OttoType.Body, color = OttoColors.Text2, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (icon != null) {
+            RowIcon(icon)
+            Spacer(Modifier.width(14.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, style = OttoType.Body, color = OttoColors.Text)
+            if (subtitle != null) Text(subtitle, style = OttoType.Caption, color = OttoColors.Text2)
+        }
+        if (value.isNotEmpty()) {
+            Spacer(Modifier.width(8.dp))
+            Text(value, style = OttoType.Body, color = OttoColors.Text2, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 150.dp))
+        }
         Spacer(Modifier.width(8.dp))
         Icon(OttoIcons.ChevronRight, contentDescription = null, tint = OttoColors.Text2, modifier = Modifier.size(18.dp))
     }
@@ -456,7 +508,7 @@ fun NotificationCard(title: String, body: String, modifier: Modifier = Modifier,
             .clip(shape)
             .background(OttoColors.Elevated)
             .border(1.dp, OttoColors.Border, shape)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if (onClick != null) Modifier.bounceClick(pressedScale = 0.98f, onClick = onClick) else Modifier)
             .padding(16.dp)
             .semantics(mergeDescendants = true) {},
     ) {

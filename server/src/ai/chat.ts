@@ -13,7 +13,7 @@ export interface ChatTurn {
 }
 
 export type ChatEvent =
-  | { event: 'meta'; data: { mode: 'ai' | 'offline'; provider?: string; reason?: string } }
+  | { event: 'meta'; data: { mode: 'ai' | 'offline'; provider?: string; model?: string; reason?: string } }
   | { event: 'delta'; data: { text: string } }
   | { event: 'card'; data: Card }
   | { event: 'error'; data: { message: string } }
@@ -116,7 +116,7 @@ export async function* runChat(deps: ChatDeps, turns: ChatTurn[], signal?: Abort
           )) {
             if (ev.type === 'content') {
               if (!metaSent) {
-                yield { event: 'meta', data: { mode: 'ai', provider: provider.name } };
+                yield { event: 'meta', data: { mode: 'ai', provider: provider.name, model: provider.model } };
                 metaSent = true;
               }
               content += ev.text;
@@ -127,7 +127,7 @@ export async function* runChat(deps: ChatDeps, turns: ChatTurn[], signal?: Abort
             }
           }
           if (!calls || calls.length === 0) {
-            if (!metaSent) yield { event: 'meta', data: { mode: 'ai', provider: provider.name } };
+            if (!metaSent) yield { event: 'meta', data: { mode: 'ai', provider: provider.name, model: provider.model } };
             for (const c of cards) yield { event: 'card', data: c };
             yield { event: 'done', data: {} };
             return;

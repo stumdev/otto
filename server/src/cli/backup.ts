@@ -1,8 +1,9 @@
 /**
- * Backup consistente do SQLite (API de backup online: funciona com o servidor rodando).
+ * Backup consistente dos bancos SQLite (API de backup online: funciona com o servidor rodando).
+ * Copia directory.db (contas) e users/*.db (um por usuário) para <destino>/<data-hora>/.
  *   Local:  npm run backup -- [pasta-destino]          (padrão: ./backups)
  *   Docker: docker compose exec otto node dist/cli/backup.js /data/backups
- * Mantém os 14 backups mais recentes na pasta.
+ * Mantém os 14 backups mais recentes.
  */
 import Database from 'better-sqlite3';
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
@@ -15,22 +16,37 @@ for (const p of [resolve('..', '.env'), resolve('.env')]) {
   }
 }
 
-const dbPath = resolve(process.env['DATABASE_PATH'] ?? './data/otto.db');
+const dataDir = resolve(process.env['DATA_DIR'] ?? './data');
 const dest = resolve(process.argv[2] ?? './backups');
-if (!existsSync(dbPath)) {
-  console.error(`Banco não encontrado em ${dbPath}`);
+const dirDb = join(dataDir, 'directory.db');
+if (!existsSync(dirDb)) {
+  console.error(`Banco não encontrado em ${dirDb}`);
   process.exit(1);
 }
-mkdirSync(dest, { recursive: true });
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-const target = join(dest, `otto-${stamp}.db`);
-const db = new Database(dbPath, { readonly: true, fileMustExist: true });
-await db.backup(target);
-db.close();
-console.log(`Backup salvo em ${target}`);
+const target = join(dest, stamp);
+mkdirSync(join(target, 'users'), { recursive: true });
 
-const files = readdirSync(dest)
-  .filter((f) => /^otto-.*\.db$/.test(f))
+async function copy(src: string, to: string): Promise<void> {
+  const db = new Database(src, { readonly: true, fileMustExist: true });
+  await db.backup(to);
+  db.close();
+}
+
+await copy(dirDb, join(target, 'directory.db'));
+const usersDir = join(dataDir, 'users');
+let n = 0;
+if (existsSync(usersDir)) {
+  for (const f of readdirSync(usersDir).filter((f) => f.endsWith('.db'))) {
+    await copy(join(usersDir, f), join(target, 'users', f));
+    n++;
+  }
+}
+console.log(`Backup salvo em ${target} (${n} usuário(s))`);
+
+const old = readdirSync(dest, { withFileTypes: true })
+  .filter((e) => e.isDirectory() && /^\d{4}-\d{2}-\d{2}T/.test(e.name))
+  .map((e) => e.name)
   .sort()
   .reverse();
-for (const old of files.slice(14)) rmSync(join(dest, old));
+for (const name of old.slice(14)) rmSync(join(dest, name), { recursive: true });

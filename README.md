@@ -1,6 +1,8 @@
 # Otto
 
-**Seu dinheiro, em tempo real.** Assistente financeiro pessoal para Android: mostra saldo, quanto entrou e saiu hoje, avisa por notificação a cada movimentação, manda um resumo diário e responde perguntas num chat com IA — tudo a partir do **seu** servidor, com dados via Open Finance.
+**Seu dinheiro, em tempo real.** Assistente financeiro para Android: mostra saldo, quanto entrou e saiu hoje, avisa por notificação a cada movimentação, manda um resumo diário e responde perguntas num chat com IA, com dados do Nubank via Open Finance.
+
+**Para quem usa:** instala o app → cria uma conta (e-mail e senha) → conecta o Nubank → pronto. Nada de servidor, endereço ou token. O endereço do servidor vai embutido no app (seção 2.3); quem opera o serviço sobe o servidor uma vez.
 
 - `server/` — Node.js 24 + TypeScript + Fastify + SQLite (better-sqlite3) + Zod
 - `app/` — Android nativo: Kotlin + Jetpack Compose (tema próprio preto e branco), Hilt, Retrofit/OkHttp, kotlinx.serialization
@@ -76,50 +78,52 @@ Com `MOCK_MODE=true`, o servidor gera ~60 dias de transações fictícias e plau
 ### 2.1 Servidor com Docker
 
 ```bash
-cp .env.example .env
-# gere um token e cole em APP_TOKEN no .env
-cd server && npm ci && npm run gen-token && cd ..
+cp .env.example .env                      # MOCK_MODE=true já vem ligado
 docker compose up -d --build
-curl http://127.0.0.1:8080/health        # {"status":"ok","version":"1.0.0","mode":"mock"}
+curl http://127.0.0.1:8080/health        # {"status":"ok","version":"2.0.0","mode":"mock"}
 ```
 
-Por padrão a porta só escuta em `127.0.0.1`. Para testar com o celular na mesma rede Wi-Fi:
-
-```bash
-OTTO_BIND=0.0.0.0 docker compose up -d
-```
+Por padrão a porta só escuta em `127.0.0.1`. Para testar com o celular na mesma rede Wi-Fi: `OTTO_BIND=0.0.0.0 docker compose up -d`.
 
 ### 2.2 Servidor sem Docker (Node 24 LTS)
 
 ```bash
 cd server
 npm ci
-npm run gen-token                         # copie para APP_TOKEN no ../.env
-# no .env, para rodar fora do Docker: DATABASE_PATH=./data/otto.db
+# no .env, para rodar fora do Docker: DATA_DIR=./data
 npm run build && npm start                # ou: npm run dev
 ```
+
+Os dados ficam em `DATA_DIR`: `directory.db` (contas e sessões) e `users/<id>.db` — **um arquivo SQLite por usuário**, o que isola totalmente os dados financeiros de cada pessoa.
 
 ### 2.3 App
 
 Requisitos: Android Studio (ou só o Android SDK) e JDK 17+.
 
+O **endereço do servidor é embutido no app** em tempo de build, pela propriedade `otto.serverUrl`:
+
+| Build | Endereço |
+|---|---|
+| `debug` | `http://10.0.2.2:8080` (emulador → servidor na sua máquina), ou o que você definir |
+| `release` | **obrigatório**: `https://...` — o build falha com uma mensagem clara se faltar |
+
+Defina em `app/local.properties` (fora do git) ou com `-Potto.serverUrl=...`:
+
+```properties
+otto.serverUrl=https://otto.seudominio.com
+```
+
 ```bash
 cd app
-./gradlew assembleDebug                   # gera app/app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleDebug                   # app/app/build/outputs/apk/debug/app-debug.apk
 ./gradlew installDebug                    # com um aparelho/emulador conectado
 ```
 
-Na primeira abertura, informe:
+**Primeiro uso (o que a pessoa vê):** tela *Crie sua conta* (nome opcional, e-mail, senha de 8+ caracteres) → tela *Conecte seu Nubank* → o widget **Pluggy Connect** abre dentro do app, a pessoa escolhe o Nubank e autoriza no app do próprio banco (Open Finance) → o Otto importa os últimos 90 dias e abre a tela Início. Em *Ajustes* ficam **Sair da conta**, **Desconectar o Nubank** (revoga o consentimento na Pluggy e apaga os dados importados) e **Excluir minha conta**.
 
-| Onde o app roda | Endereço do servidor |
-|---|---|
-| Emulador | `http://10.0.2.2:8080` |
-| Celular na mesma rede | `http://<IP-do-computador>:8080` (suba com `OTTO_BIND=0.0.0.0`) |
-| Produção | `https://otto.seudominio.com` |
+Com o servidor em `MOCK_MODE=true`, o passo do banco vira um botão **Usar conta de demonstração**, com movimentações fictícias — bom para testar sem chaves.
 
-e o **token** (`APP_TOKEN`). Também dá para usar **Ler QR code**: no servidor, rode `npm run setup-qr -- http://10.0.2.2:8080` e aponte a câmera (o QR contém o token — não compartilhe a tela).
-
-> **Android 17+:** apps com `targetSdk 37` precisam da permissão `ACCESS_LOCAL_NETWORK` para falar com endereços da rede local ([documentação](https://developer.android.com/privacy-and-security/local-network-permission)). O Otto pede essa permissão automaticamente só quando o servidor está num endereço local; um servidor público com HTTPS não precisa dela.
+> **Android 17+:** apps com `targetSdk 37` precisam da permissão `ACCESS_LOCAL_NETWORK` para falar com endereços da rede local ([documentação](https://developer.android.com/privacy-and-security/local-network-permission)). O app só pede quando o servidor embutido é local (emulador, desenvolvimento); um servidor público com HTTPS não precisa dela.
 
 > `http://` só funciona no **build debug**. O release aceita apenas `https://` (`usesCleartextTraffic=false` e `network_security_config` restrito).
 
@@ -127,11 +131,11 @@ e o **token** (`APP_TOKEN`). Também dá para usar **Ler QR code**: no servidor,
 
 No build **debug**, faça **pressão longa na marca do Otto** (canto superior esquerdo da tela Início). O servidor cria um Pix fictício, atualiza o saldo e dispara a notificação — `Entrou R$ 1.800,00 · Pix de João Silva · Saldo R$ 48.215,90`. Com o app aberto ela aparece como um cartão no topo; com o app em segundo plano, como notificação do sistema.
 
-Pelo terminal:
+Pelo terminal (use o token devolvido por `POST /v1/auth/login`):
 
 ```bash
 curl -X POST http://127.0.0.1:8080/v1/dev/simulate \
-  -H "Authorization: Bearer $APP_TOKEN" -H "content-type: application/json" \
+  -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
   -d '{"direction":"out","amountCents":21540}'
 ```
 
@@ -152,28 +156,27 @@ Para receber em segundos com o app fechado, configure o FCM (seção 3.3).
 
 ### 3.1 Pluggy + Nubank (Open Finance)
 
-O caminho oficial e **gratuito para uso pessoal** é o **Meu Pluggy** + conector **MeuPluggy** (até 5 conexões, sem uso comercial; [guia](https://docs.pluggy.ai/docs/guides/meu-pluggy-personal-use)):
+Cada usuário conecta o **próprio** Nubank dentro do app, pelo widget **Pluggy Connect**. O servidor só precisa das credenciais da *sua aplicação* na Pluggy:
 
-1. Crie uma conta em **[meu.pluggy.ai](https://meu.pluggy.ai)** e conecte o **Nubank** lá. A autorização acontece no app do Nubank (consentimento do Open Finance). **Você nunca digita a senha do banco no Otto.**
-2. Entre no **[Dashboard da Pluggy](https://dashboard.pluggy.ai)** com a mesma conta. Em *Applications*, crie uma aplicação e anote o **Client ID**; gere o **Client Secret** (aparece uma vez só).
-3. Em *Applications → sua aplicação → Demo → Connect Account*, escolha o conector **MeuPluggy** (não o Nubank direto) e entre com sua conta do Meu Pluggy. Cada banco vira um **item**.
-4. Copie o **itemId** do Nubank (em *Connected Items*).
-5. No `.env`:
+1. Crie uma conta no **[Dashboard da Pluggy](https://dashboard.pluggy.ai)**, crie uma *Application* e anote o **Client ID**; gere o **Client Secret** (aparece uma vez só).
+2. No `.env`:
    ```ini
    MOCK_MODE=false
    PLUGGY_CLIENT_ID=...
    PLUGGY_CLIENT_SECRET=...
-   PLUGGY_ITEM_IDS=<itemId>
    ```
-6. Confira: `cd server && npm run pluggy:check` (mostra status do item, validade do consentimento e as contas — sem transações).
+3. Como funciona por baixo: o app pede `POST /v1/connection/token`; o servidor cria um *connect token* na Pluggy com `clientUserId = id do usuário`; o app abre `https://<seu-servidor>/connect#token=...` numa WebView (a página carrega o widget; o token vai no *fragmento* da URL, que não chega aos logs); ao terminar, a WebView volta ao app por `otto://connected?itemId=...`; o app chama `POST /v1/connection/items` e o servidor **confere na Pluggy que o item pertence àquele usuário** (`clientUserId`) antes de aceitar. O script do widget vem de `PLUGGY_CONNECT_SCRIPT_URL` (padrão: `cdn.pluggy.ai/pluggy-connect/v2.7.0`; atualize se a Pluggy publicar versão nova).
+4. Confira um item: `cd server && npm run pluggy:check -- <itemId>`.
 
-A autorização do Meu Pluggy vale **1 ano** (`consentExpiresAt`). Ao expirar, o item vai para `LOGIN_ERROR`/`USER_AUTHORIZATION_EXPIRED`; o Otto recebe o webhook `item/error` e te avisa por notificação. Para renovar, repita o passo 3 (e confira se o itemId mudou).
+> **Plano da Pluggy:** conectar o Nubank de **qualquer pessoa** (não só o seu) depende do plano da sua aplicação na Pluggy; o caminho gratuito "Meu Pluggy" é só para uso pessoal e sem fins comerciais. Veja os planos e o que o ambiente de testes permite antes de abrir o app ao público.
 
-Na primeira sincronização, o Otto importa os últimos 90 dias **sem notificar**. Depois, só notifica transações novas (no máximo `NOTIFY_MAX_AGE_HOURS` de idade).
+O consentimento do Open Finance vale **1 ano** (`consentExpiresAt`). Ao expirar, o item vai para `LOGIN_ERROR`/`USER_AUTHORIZATION_EXPIRED`; o servidor recebe o webhook `item/error` e avisa o usuário por notificação. Hoje a renovação é desconectar e conectar de novo nos Ajustes.
+
+Na primeira sincronização de cada usuário, o Otto importa os últimos 90 dias **sem notificar**. Depois, só notifica transações novas (no máximo `NOTIFY_MAX_AGE_HOURS` de idade).
 
 ### 3.2 Webhook da Pluggy
 
-Webhooks exigem uma URL **HTTPS pública na porta 443** (veja a seção 6). Depois:
+Webhooks exigem uma URL **HTTPS pública na porta 443** (veja a seção 6). O webhook é da *aplicação* (vale para todos os usuários); o servidor descobre de quem é cada evento pelo `itemId`. Depois:
 
 ```ini
 PUBLIC_BASE_URL=https://otto.seudominio.com
@@ -217,9 +220,9 @@ Provedor, modelo e base URL são configuráveis (`AI_PROVIDER_ORDER`, `GROQ_*`, 
 ```ini
 NODE_ENV=production
 TRUST_PROXY=true
-APP_TOKEN=<48+ caracteres aleatórios>
 MOCK_MODE=false
-PLUGGY_CLIENT_ID=... / PLUGGY_CLIENT_SECRET=... / PLUGGY_ITEM_IDS=...
+PLUGGY_CLIENT_ID=... / PLUGGY_CLIENT_SECRET=...
+SIGNUP_CODE=<opcional: limita o cadastro a convidados>
 PUBLIC_BASE_URL=https://otto.seudominio.com
 PLUGGY_WEBHOOK_HEADER_SECRET=... / PLUGGY_WEBHOOK_SIGNING_SECRET=whsec_...
 FIREBASE_SERVICE_ACCOUNT_FILE=/run/secrets/otto/firebase-service-account.json
@@ -247,10 +250,12 @@ Ou seja: nomes de contrapartes só saem quando a pergunta exige ("qual foi minha
 
 - **Nenhum segredo no repositório.** Tudo em `.env` / `secrets/`; o `.gitignore` cobre `.env`, `google-services.json`, contas de serviço, keystores, `keystore.properties`, `*.db` e `data/`.
 - **Senha do banco nunca passa pelo Otto.** Só consentimento Open Finance via Pluggy.
-- **Autenticação do app:** `Authorization: Bearer <APP_TOKEN>` (mínimo 32 caracteres; o servidor não sobe sem ele), comparado em tempo constante. Rate limit global (120/min) e por rota (chat 20/min, sync 6/min). CORS fechado. Cabeçalhos de segurança via Helmet. Corpo limitado a 256 KB. Validação Zod em tudo.
+- **Contas e sessões:** e-mail + senha (hash **scrypt** com sal; verificação em tempo constante e custo igual quando o e-mail não existe). O login devolve um token aleatório de 256 bits; o servidor guarda só o **SHA-256** dele (revogável no logout; expira após `SESSION_IDLE_DAYS` sem uso). Cadastro limitado por IP (`SIGNUP_RATE_PER_HOUR`) e, se quiser, por código de convite (`SIGNUP_CODE`). Login: 10 tentativas/min por IP. Rate limit global (120/min) e por rota (chat 20/min, sync 6/min). CORS fechado. Cabeçalhos de segurança via Helmet. Corpo limitado a 256 KB. Validação Zod em tudo.
+- **Isolamento:** um banco SQLite por usuário; toda rota `/v1/*` resolve a sessão e só enxerga o banco do dono. O item da Pluggy só é aceito se criado com o connect token do mesmo usuário.
+- **LGPD:** `DELETE /v1/account` (pede a senha) apaga a conta, sessões e todos os dados, e revoga os itens na Pluggy; `DELETE /v1/connection` faz o mesmo só com os dados bancários.
 - **Logs:** cabeçalhos `Authorization` e `X-Pluggy-Signature` são redigidos; valores de transações e corpos de erro dos provedores de IA não são registrados.
 - **Contêiner:** usuário não-root, sistema de arquivos somente leitura (exceto o volume `/data`), `no-new-privileges`, todas as *capabilities* removidas, porta presa em `127.0.0.1`.
-- **App:** token cifrado com AES-256-GCM no **Android Keystore** (a lib `EncryptedSharedPreferences` foi descontinuada pelo Google; usamos o Keystore direto). **Bloqueio por biometria/PIN ligado por padrão** (ao abrir e após 1 min em segundo plano). **`FLAG_SECURE`** ligado por padrão (sem capturas de tela, prévia oculta em Recentes; dá para desligar nos Ajustes). Backup em nuvem e transferência entre aparelhos desativados. Notificações na tela de bloqueio mostram só "Nova movimentação na conta". Release: só HTTPS e só certificados do sistema.
+- **App:** token da sessão cifrado com AES-256-GCM no **Android Keystore** (a lib `EncryptedSharedPreferences` foi descontinuada pelo Google; usamos o Keystore direto). **Bloqueio por biometria/PIN ligado por padrão** (ao abrir e após 1 min em segundo plano). **`FLAG_SECURE`** ligado por padrão (sem capturas de tela, prévia oculta em Recentes; dá para desligar nos Ajustes). Backup em nuvem e transferência entre aparelhos desativados. Notificações na tela de bloqueio mostram só "Nova movimentação na conta". Release: só HTTPS e só certificados do sistema.
 - **Dependências fixadas** em versões exatas (`--save-exact`, catálogo Gradle), escolhidas com pelo menos ~2 semanas de publicação quando possível; scripts de instalação npm liberados só para `better-sqlite3` e `esbuild` (`allowScripts`). `npm audit`: **0 vulnerabilidades** na data da entrega. O Gradle wrapper valida o SHA-256 da distribuição.
 
 ---
@@ -305,7 +310,7 @@ Sem `keystore.properties`, o build gera `app-release-unsigned.apk`.
 
 ## 8. Backup do SQLite
 
-O backup usa a API online do SQLite (consistente mesmo com o servidor rodando) e mantém os 14 mais recentes:
+O backup usa a API online do SQLite (consistente mesmo com o servidor rodando): copia `directory.db` e todos os `users/*.db` para `<destino>/<data-hora>/` e mantém os 14 mais recentes:
 
 ```bash
 # Docker
@@ -320,7 +325,7 @@ Agende com cron (ex.: todo dia às 3h):
 0 3 * * * cd /caminho/otto && docker compose exec -T otto node dist/cli/backup.js /data/backups
 ```
 
-Os backups contêm seu histórico financeiro: guarde-os cifrados (ex.: `restic`, `age`) se saírem da máquina. Para restaurar: pare o servidor, substitua `data/otto.db` pelo backup e suba de novo.
+Os backups contêm o histórico financeiro de **todos** os usuários: guarde-os cifrados (ex.: `restic`, `age`) se saírem da máquina. Para restaurar: pare o servidor, substitua `data/directory.db` e `data/users/` pelo backup e suba de novo.
 
 ---
 
@@ -328,7 +333,7 @@ Os backups contêm seu histórico financeiro: guarde-os cifrados (ex.: `restic`,
 
 ```bash
 cd server
-npm test          # Vitest: 55 testes
+npm test          # Vitest: 89 testes
 npm run typecheck
 ```
 
@@ -365,16 +370,18 @@ Endpoints extras além dos pedidos: `GET /v1/status`, `GET /v1/settings`, `GET /
 
 | Sintoma | O que verificar |
 |---|---|
-| Servidor não sobe: "APP_TOKEN precisa ter pelo menos 32 caracteres" | Gere com `npm run gen-token` e coloque no `.env`. |
-| "MOCK_MODE=false exige PLUGGY_…" | Preencha as três variáveis da Pluggy ou volte para `MOCK_MODE=true`. |
-| App: "Token inválido" | O token do app precisa ser exatamente o `APP_TOKEN`. |
-| App: "Sem conexão com o servidor" no emulador | Use `http://10.0.2.2:8080` (não `localhost`) e build **debug**. No Android 17+ aceite a permissão de **rede local** que o app pede (sem ela o sistema bloqueia conexões a `10.x`, `192.168.x` etc.). |
+| "MOCK_MODE=false exige PLUGGY_…" | Preencha `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET` ou volte para `MOCK_MODE=true`. |
+| App: "Sessão expirada. Entre de novo." | A sessão foi encerrada (logout em outro lugar, conta excluída ou sem uso por `SESSION_IDLE_DAYS`). Entre de novo. |
+| Build release falha com "Defina otto.serverUrl" | Coloque `otto.serverUrl=https://...` em `app/local.properties` (seção 2.3). |
+| Esqueci a senha | Ainda não há recuperação por e-mail (precisaria de um provedor de e-mail). Hoje só quem opera o servidor resolve, removendo a conta em `directory.db`. |
+| App: "Sem conexão com o servidor" no emulador | O build **debug** aponta para `http://10.0.2.2:8080` (não `localhost`); o servidor precisa estar rodando. No Android 17+ aceite a permissão de **rede local** que o app pede. |
 | Emulador não inicia ("hypervisor driver is not installed") | Instale o driver: `sdkmanager "extras/google/Android_Emulator_Hypervisor_Driver"` e rode `silent_install.bat` (pasta `SdkextrasgoogleAndroid_Emulator_Hypervisor_Driver`) como administrador. |
-| App no celular não conecta | Suba com `OTTO_BIND=0.0.0.0`, mesma rede Wi-Fi, firewall do PC liberando a porta 8080; em release, só `https://`. |
+| App no celular não conecta | Em debug com servidor no PC: `otto.serverUrl=http://<IP-do-PC>:8080`, suba com `OTTO_BIND=0.0.0.0`, mesma rede Wi-Fi, firewall liberando a 8080; em release, só `https://`. |
+| Widget do banco não abre / fica em branco | O celular precisa alcançar `https://<servidor>/connect` e `cdn.pluggy.ai`. Veja o log do servidor em `/v1/connection/token` (credenciais da Pluggy). |
 | Não chegam notificações | Permissão de notificação concedida? Em *Ajustes*, veja a linha "Entrega". Sem FCM, com o app fechado, o intervalo mínimo é ~15 min. Economia de bateria agressiva (alguns fabricantes) atrasa o WorkManager: libere o Otto da otimização de bateria. |
 | Build mostra "AVISO: google-services.json não tem o app Android 'app.otto'" | O arquivo foi gerado para outro pacote (por exemplo, de antes da mudança de nome). No Firebase, adicione um app Android com o pacote `app.otto`, baixe o `google-services.json` de novo e recompile. Até lá o app funciona com notificação local. |
 | Push FCM não chega | `google-services.json` em `app/app/` e app recompilado; `FIREBASE_SERVICE_ACCOUNT_FILE` apontando para o JSON (log do servidor deve dizer "FCM habilitado"); mesmo projeto Firebase nos dois. |
-| Transações reais não aparecem | `npm run pluggy:check`. Com Meu Pluggy, os dados renovam a cada 24 h. Item em `LOGIN_ERROR`? Renove a autorização (seção 3.1). |
+| Transações reais não aparecem | `npm run pluggy:check -- <itemId>`. Com Meu Pluggy, os dados renovam a cada 24 h. Item em `LOGIN_ERROR`? Renove a autorização (seção 3.1). |
 | Webhooks recusados (401) | Segredos no `.env` iguais aos do Dashboard/`register-webhook`; relógio do servidor sincronizado (NTP) — a assinatura tem tolerância de 5 min. |
 | Alertas instantâneos não chegam | *Ajustes → Alertas instantâneos* diz "Ativo"? Notificações do Nubank ligadas no celular? Veja *Notificações não reconhecidas*: se o Pix está lá, o formato mudou (seção 1). Android 13+ fora da loja: "Permitir configurações restritas". Tire o Otto da otimização de bateria. |
 | Pix aparece duas vezes na lista | Só acontece se o valor oficial for diferente do lido na notificação (o casamento exige o mesmo valor). A provisória expira sozinha em `PROVISIONAL_TTL_HOURS`. |
@@ -386,11 +393,22 @@ Endpoints extras além dos pedidos: `GET /v1/status`, `GET /v1/settings`, `GET /
 
 ## 12. Referência da API
 
-Todas as rotas `/v1/*` (exceto o webhook) exigem `Authorization: Bearer <APP_TOKEN>`.
+Rotas públicas: `/health`, `/v1/config`, `/connect`, `/v1/auth/register`, `/v1/auth/login` e o webhook. Todas as outras `/v1/*` exigem `Authorization: Bearer <token da sessão>`.
 
 | Método | Rota | Descrição |
 |---|---|---|
 | GET | `/health` | Público. `{status, version, mode}` |
+| GET | `/v1/config` | Público. `{mode, signupCodeRequired, version}` |
+| POST | `/v1/auth/register` | `{email, password(8+), name?, signupCode?}` → `{token, user}` |
+| POST | `/v1/auth/login` | `{email, password}` → `{token, user}` |
+| POST | `/v1/auth/logout` | Encerra a sessão |
+| GET | `/v1/me` | Dados da conta |
+| DELETE | `/v1/account` | `{password}` — exclui conta e dados (403 se a senha estiver errada) |
+| GET | `/connect` | Página do widget Pluggy Connect (token no fragmento `#token=`) |
+| GET | `/v1/connection` | `{connected, mode, items[]}` |
+| POST | `/v1/connection/token` | Connect token da Pluggy (`{mock:true}` no modo demonstração) |
+| POST | `/v1/connection/items` | `{itemId}` — valida o dono do item e faz a 1ª importação |
+| DELETE | `/v1/connection` | Desconecta o banco e apaga os dados importados |
 | GET | `/v1/status` | Modo, push ativo, IA, última sincronização |
 | GET | `/v1/summary` | Saldo, entrou/saiu hoje, semana, série de 7 dias, 3 últimas |
 | GET | `/v1/transactions?cursor&limit&from&to` | Lista paginada por cursor (datas `AAAA-MM-DD`) |

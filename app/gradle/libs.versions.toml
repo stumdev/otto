@@ -14,7 +14,6 @@ biometric = "1.1.0"
 fragment = "1.9.1"
 work = "2.12.0"
 firebaseBom = "35.1.0"
-codeScanner = "16.1.0"
 retrofit = "3.0.0"
 okhttp = "5.5.1"
 serialization = "1.11.0"
@@ -46,7 +45,6 @@ hilt-compiler = { module = "com.google.dagger:hilt-android-compiler", version.re
 
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
-play-services-code-scanner = { module = "com.google.android.gms:play-services-code-scanner", version.ref = "codeScanner" }
 
 retrofit = { module = "com.squareup.retrofit2:retrofit", version.ref = "retrofit" }
 retrofit-kotlinx-serialization = { module = "com.squareup.retrofit2:converter-kotlinx-serialization", version.ref = "retrofit" }

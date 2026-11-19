@@ -68,7 +68,7 @@ describe('fallback de provedor de IA', () => {
     const f = fakeFetch(() => sse([text('Seu saldo é '), text('**R$ 48.215,90**.')]));
     const r = await collect(runChat(deps({ fetchImpl: f.impl }), ask));
     expect(r.text).toBe('Seu saldo é **R$ 48.215,90**.');
-    expect(r.events[0]).toEqual({ event: 'meta', data: { mode: 'ai', provider: 'groq' } });
+    expect(r.events[0]).toEqual({ event: 'meta', data: { mode: 'ai', provider: 'groq', model: expect.any(String) } });
     expect(f.calls[0]!.url).toBe('https://groq.test/openai/v1/chat/completions');
     expect(f.calls[0]!.body.model).toBe('openai/gpt-oss-120b');
   });
@@ -89,7 +89,7 @@ describe('fallback de provedor de IA', () => {
     expect(sleeps[1]!).toBeGreaterThan(sleeps[0]!); // backoff exponencial
     expect(f.calls[f.calls.length - 1]!.url).toBe('https://gemini.test/v1beta/openai/chat/completions');
     expect(r.text).toBe('Olá do Gemini');
-    expect(r.events[0]).toEqual({ event: 'meta', data: { mode: 'ai', provider: 'gemini' } });
+    expect(r.events[0]).toEqual({ event: 'meta', data: { mode: 'ai', provider: 'gemini', model: expect.any(String) } });
   });
 
   it('não insiste em erro não recuperável (401) e vai direto ao próximo', async () => {
