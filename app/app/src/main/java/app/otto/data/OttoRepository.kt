@@ -79,6 +79,16 @@ class OttoRepository @Inject constructor(private val prefs: AppPrefs) {
 
     suspend fun status() = call { status() }
     suspend fun summary() = call { summary() }
+    suspend fun wallet() = call { wallet() }
+
+    /** Define (1–31) ou remove (null) o dia de vencimento do cartão. */
+    suspend fun setCardDueDay(day: Int?) = call {
+        updateSettingsRaw(
+            kotlinx.serialization.json.buildJsonObject {
+                put("cardDueDay", day?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull)
+            },
+        )
+    }
     suspend fun transactions(cursor: String?, limit: Int = 30) = call { transactions(cursor = cursor, limit = limit) }
     suspend fun sync() = call { sync() }
     suspend fun settings() = call { settings() }

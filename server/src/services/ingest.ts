@@ -10,7 +10,7 @@ import {
 } from '../db/repo.js';
 import { addDays } from '../lib/time.js';
 import type { Notifier } from './notifier.js';
-import { transactionNotificationText } from './notifier.js';
+import { reserveNotificationText, transactionNotificationText } from './notifier.js';
 import type { Settings } from './settings.js';
 
 export interface IngestOptions {
@@ -98,6 +98,13 @@ export async function ingestTransactions(
       const balanceAfter = balanceNow - laterSum;
       if (matched.has(tx.externalId)) continue; // já avisada quando a notificação do banco chegou
       if (Date.parse(tx.occurredAt) < minTime) continue;
+      if (tx.amountCents === 0) continue;
+      if (tx.internal) {
+        const t = reserveNotificationText(tx.amountCents, balanceAfter);
+        const row = await notifier.notify({ dedupeKey: `tx:${tx.externalId}`, kind: 'caixinha', ...t, target: 'wallet' });
+        if (row) notified++;
+        continue;
+      }
       if (tx.amountCents > 0 && !opts.settings.notifyIncoming) continue;
       if (tx.amountCents < 0 && !opts.settings.notifyOutgoing) continue;
       if (tx.amountCents === 0) continue;

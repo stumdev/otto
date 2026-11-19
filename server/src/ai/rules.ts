@@ -2,6 +2,9 @@ import type { DB } from '../db/index.js';
 import { searchTransactions, sumRange, topTransactions, totalBalance } from '../db/repo.js';
 import { formatBRL } from '../lib/money.js';
 import { brDate, resolvePeriod, type DateRange } from '../lib/time.js';
+import { categoryBreakdown, reserveFlows } from '../db/wallet.js';
+import type { Settings } from '../services/settings.js';
+import { buildCards, buildReserves } from '../services/wallet.js';
 import { expandQuery, stripAccents, type Card } from './tools.js';
 
 /**
@@ -59,7 +62,16 @@ export interface RuleAnswer {
   cards: Card[];
 }
 
-export function answerWithRules(db: DB, question: string, now: Date): RuleAnswer {
+const NO_SETTINGS: Settings = {
+  bigOutflowThresholdCents: 0,
+  dailySummaryTime: '22:00',
+  dailySummaryEnabled: false,
+  notifyIncoming: true,
+  notifyOutgoing: true,
+  cardDueDay: null,
+};
+
+export function answerWithRules(db: DB, question: string, now: Date, settings: Settings = NO_SETTINGS): RuleAnswer {
   const lower = lowerClean(question);
   const t = stripAccents(lower); // para detectar intenção
   const today: PeriodPick = { key: 'today', label: 'hoje' };
@@ -67,6 +79,67 @@ export function answerWithRules(db: DB, question: string, now: Date): RuleAnswer
   const wantsIn = /\b(entrou|entrada|entradas|recebi|recebido|recebidos|ganhei)\b/.test(t);
   const wantsOut = /\b(saiu|saida|saidas|gastei|gasto|gastos|paguei|enviei)\b/.test(t);
   const wantsTop = /\b(maior|maiores)\b/.test(t);
+
+  // caixinhas
+  if (/\b(caixinhas?|reservas?)\b/.test(t)) {
+    const r = buildReserves(db);
+    const card: Card | undefined = r.items.length
+      ? { type: 'reserves', title: 'Caixinhas', totalCents: r.totalCents, items: r.items.slice(0, 5).map((i) => ({ name: i.name, subtitle: i.rateLabel ?? 'Caixinha', amountCents: i.balanceCents })) }
+      : undefined;
+    if (/\b(guardei|guardado|coloquei|resgatei|resgatado|tirei)\b/.test(t)) {
+      const p = detectPeriod(t, { key: 'this_month', label: 'neste mês' });
+      const f = reserveFlows(db, resolvePeriod(p.key, now));
+      return {
+        text: `${capitalize(p.label)} você guardou **${formatBRL(f.savedCents)}** e resgatou **${formatBRL(f.withdrawnCents)}** das caixinhas.`,
+        cards: card ? [card] : [],
+      };
+    }
+    if (r.items.length === 0) return { text: 'Não encontrei caixinhas com saldo.', cards: [] };
+    return {
+      text: `Você tem **${formatBRL(r.totalCents)}** em ${r.items.length} ${plural(r.items.length, 'caixinha', 'caixinhas')}.`,
+      cards: card ? [card] : [],
+    };
+  }
+
+  // cartão de crédito
+  if (/\b(fatura|cartao|limite|credito)\b/.test(t)) {
+    const c = buildCards(db, settings, now)[0];
+    if (!c) return { text: 'Não encontrei cartão de crédito conectado.', cards: [] };
+    const venc = c.dueDate ? `, vence em ${brDate(c.dueDate)}` : '';
+    const disp = c.availableLimitCents !== null ? ` Limite disponível: **${formatBRL(c.availableLimitCents)}**.` : '';
+    return {
+      text: `A fatura atual do cartão está em **${formatBRL(c.openBillCents)}**${venc}.${disp}`,
+      cards: [
+        {
+          type: 'credit',
+          title: c.last4 ? `${c.name} •••• ${c.last4}` : c.name,
+          billCents: c.openBillCents,
+          limitCents: c.creditLimitCents,
+          availableCents: c.availableLimitCents,
+          subtitle: c.dueDate ? `Vence em ${brDate(c.dueDate)}` : 'Vencimento não informado',
+        },
+      ],
+    };
+  }
+
+  // gastos por categoria
+  if (/\b(categoria|categorias|onde gastei|com o que gastei)\b/.test(t)) {
+    const p = detectPeriod(t, { key: 'this_month', label: 'neste mês' });
+    const rows = categoryBreakdown(db, resolvePeriod(p.key, now), 'out', 'tudo', 6);
+    if (rows.length === 0) return { text: `Não encontrei gastos ${p.label}.`, cards: [] };
+    const total = rows.reduce((s, r) => s + r.totalCents, 0);
+    const top = rows[0]!;
+    return {
+      text: `${capitalize(p.label)} o que mais pesou foi **${top.category}**: **${formatBRL(top.totalCents)}**.`,
+      cards: [
+        {
+          type: 'breakdown',
+          title: `Gastos por categoria · ${p.label}`,
+          items: rows.map((r) => ({ label: r.category, amountCents: -r.totalCents, pct: total > 0 ? Math.round((r.totalCents / total) * 1000) / 10 : 0 })),
+        },
+      ],
+    };
+  }
 
   if (/\bsaldo\b/.test(t) && !wantsIn && !wantsOut) {
     const b = totalBalance(db);
@@ -135,7 +208,7 @@ export function answerWithRules(db: DB, question: string, now: Date): RuleAnswer
   }
 
   return {
-    text: 'No modo offline eu respondo sobre saldo, quanto entrou ou saiu (hoje, ontem, na semana ou no mês), maiores saídas e gastos por nome, como “quanto gastei no mercado este mês?”.',
+    text: 'No modo offline eu respondo sobre saldo, caixinhas, fatura e limite do cartão, quanto entrou ou saiu (hoje, ontem, na semana ou no mês), maiores saídas, gastos por categoria e gastos por nome, como “quanto gastei no mercado este mês?”.',
     cards: [],
   };
 }

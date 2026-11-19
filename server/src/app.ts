@@ -27,6 +27,7 @@ import { PluggySync } from './services/pluggy/sync.js';
 import { authenticateWebhook, processWebhook, WebhookPayloadSchema } from './services/pluggy/webhook.js';
 import { getSettings, SettingsPatchSchema, updateSettings } from './services/settings.js';
 import { buildSummary, decodeCursor, encodeCursor, toTxDto } from './services/summary.js';
+import { buildWallet } from './services/wallet.js';
 
 export const VERSION = '1.0.0';
 
@@ -251,7 +252,10 @@ export async function buildApp(opts: AppOptions): Promise<{ app: FastifyInstance
       version: VERSION,
     }));
 
-    api.get('/v1/summary', async () => buildSummary(db, now()));
+    api.get('/v1/summary', async () => buildSummary(db, now(), settings()));
+
+    // caixinhas, cartão (fatura, limite, próximas faturas) e compras recentes no cartão
+    api.get('/v1/wallet', async () => buildWallet(db, settings(), now()));
 
     api.get('/v1/transactions', async (req) => {
       const q = TxQuery.parse(req.query);
@@ -348,6 +352,7 @@ export async function buildApp(opts: AppOptions): Promise<{ app: FastifyInstance
         maxRetries: config.AI_MAX_RETRIES,
         fetchImpl: opts.fetchImpl,
         offlineChunkDelayMs: 18,
+        settings,
       };
       try {
         for await (const ev of runChat(deps, turns, abort.signal)) send(ev.event, ev.data);

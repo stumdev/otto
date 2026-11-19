@@ -18,8 +18,21 @@ const AccountSchema = z.object({
   subtype: z.string().nullish(),
   name: z.string().nullish(),
   marketingName: z.string().nullish(),
+  number: z.string().nullish(),
   balance: z.number(),
   currencyCode: z.string().default('BRL'),
+  creditData: z
+    .object({
+      level: z.string().nullish(),
+      brand: z.string().nullish(),
+      balanceCloseDate: z.string().nullish(),
+      balanceDueDate: z.string().nullish(),
+      availableCreditLimit: z.number().nullish(),
+      creditLimit: z.number().nullish(),
+      minimumPayment: z.number().nullish(),
+    })
+    .passthrough()
+    .nullish(),
 });
 export type PluggyAccount = z.infer<typeof AccountSchema>;
 
@@ -58,6 +71,16 @@ const TransactionSchema = z.object({
     })
     .passthrough()
     .nullish(),
+  /** Só em contas de cartão de crédito. */
+  creditCardMetadata: z
+    .object({
+      installmentNumber: z.number().nullish(),
+      totalInstallments: z.number().nullish(),
+      billForecastDate: z.string().nullish(), // "YYYY-MM"
+      billId: z.string().nullish(),
+    })
+    .passthrough()
+    .nullish(),
 });
 export type PluggyTransaction = z.infer<typeof TransactionSchema>;
 
@@ -73,6 +96,34 @@ const ItemSchema = z
   })
   .passthrough();
 export type PluggyItem = z.infer<typeof ItemSchema>;
+
+const InvestmentSchema = z
+  .object({
+    id: z.string(),
+    itemId: z.string().nullish(),
+    name: z.string(),
+    type: z.string(),
+    subtype: z.string().nullish(),
+    status: z.string().nullish(),
+    balance: z.number(),
+    rate: z.number().nullish(),
+    rateType: z.string().nullish(),
+    issuer: z.string().nullish(),
+    dueDate: z.string().nullish(),
+    date: z.string().nullish(),
+  })
+  .passthrough();
+export type PluggyInvestment = z.infer<typeof InvestmentSchema>;
+
+const BillSchema = z
+  .object({
+    id: z.string(),
+    dueDate: z.string(),
+    totalAmount: z.number(),
+    minimumPaymentAmount: z.number().nullish(),
+  })
+  .passthrough();
+export type PluggyBill = z.infer<typeof BillSchema>;
 
 export class PluggyError extends Error {
   constructor(
@@ -138,6 +189,32 @@ export class PluggyClient {
       const body = z
         .object({ results: z.array(AccountSchema), totalPages: z.number().optional() })
         .parse(await this.get(`/accounts?itemId=${encodeURIComponent(itemId)}&page=${page}`));
+      out.push(...body.results);
+      if (!body.totalPages || page >= body.totalPages) break;
+    }
+    return out;
+  }
+
+  /** GET /investments?itemId= (as Caixinhas do Nubank vêm como CDB). */
+  async listInvestments(itemId: string): Promise<PluggyInvestment[]> {
+    const out: PluggyInvestment[] = [];
+    for (let page = 1; page <= 20; page++) {
+      const body = z
+        .object({ results: z.array(InvestmentSchema), totalPages: z.number().optional() })
+        .parse(await this.get(`/investments?itemId=${encodeURIComponent(itemId)}&page=${page}&pageSize=100`));
+      out.push(...body.results);
+      if (!body.totalPages || page >= body.totalPages) break;
+    }
+    return out;
+  }
+
+  /** GET /bills?accountId= (faturas fechadas do cartão; nem todo conector fornece). */
+  async listBills(accountId: string): Promise<PluggyBill[]> {
+    const out: PluggyBill[] = [];
+    for (let page = 1; page <= 10; page++) {
+      const body = z
+        .object({ results: z.array(BillSchema), totalPages: z.number().optional() })
+        .parse(await this.get(`/bills?accountId=${encodeURIComponent(accountId)}&page=${page}`));
       out.push(...body.results);
       if (!body.totalPages || page >= body.totalPages) break;
     }

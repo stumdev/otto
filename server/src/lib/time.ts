@@ -81,6 +81,23 @@ export function brDate(date: string): string {
   return `${d}/${m}/${y}`;
 }
 
+/**
+ * Próxima data (YYYY-MM-DD) com o dia do mês `day` a partir de `today` (inclusive).
+ * Em meses mais curtos usa o último dia (ex.: dia 31 em fevereiro -> 28/29).
+ */
+export function nextMonthlyDate(today: string, day: number): string {
+  const t = DateTime.fromISO(today, { zone: ZONE });
+  const inMonth = (m: DateTime) => m.set({ day: Math.min(day, m.daysInMonth ?? 28) });
+  const thisMonth = inMonth(t.startOf('month'));
+  const target = thisMonth.toISODate()! >= today ? thisMonth : inMonth(t.startOf('month').plus({ months: 1 }));
+  return target.toISODate()!;
+}
+
+/** "YYYY-MM" do mês da data local. */
+export function monthOf(date: string): string {
+  return date.slice(0, 7);
+}
+
 export interface DateRange {
   from: string; // inclusivo, YYYY-MM-DD local
   to: string; // inclusivo, YYYY-MM-DD local

@@ -5,6 +5,7 @@ import { ingestTransactions, type IngestResult } from '../ingest.js';
 import type { Notifier } from '../notifier.js';
 import type { Settings } from '../settings.js';
 import { generateMockRange, MOCK_ACCOUNT_ID, MOCK_ACCOUNT_NAME, simulatedPix } from './generator.js';
+import { refreshMockWallet } from './wallet.js';
 
 const META_UNTIL = 'mock_generated_until';
 
@@ -32,6 +33,7 @@ export class MockBank {
   async tick(now: Date, settings: Settings, maxAgeHours: number): Promise<IngestResult> {
     const nowIso = now.toISOString();
     this.ensureAccount(nowIso);
+    refreshMockWallet(this.db, now);
     const after = getMeta(this.db, META_UNTIL);
     const generated = generateMockRange(now, after);
     const result = await this.apply(generated, { notify: after !== undefined, now, settings, maxAgeHours });

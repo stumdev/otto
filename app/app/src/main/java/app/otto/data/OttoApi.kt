@@ -14,6 +14,9 @@ interface OttoApi {
     @GET("v1/summary")
     suspend fun summary(): Summary
 
+    @GET("v1/wallet")
+    suspend fun wallet(): Wallet
+
     @GET("v1/transactions")
     suspend fun transactions(
         @Query("cursor") cursor: String? = null,
@@ -30,6 +33,10 @@ interface OttoApi {
 
     @PUT("v1/settings")
     suspend fun updateSettings(@Body patch: SettingsPatch): ServerSettings
+
+    /** Para enviar null explicitamente (ex.: remover o dia de vencimento). */
+    @PUT("v1/settings")
+    suspend fun updateSettingsRaw(@Body body: kotlinx.serialization.json.JsonObject): ServerSettings
 
     @POST("v1/devices")
     suspend fun registerDevice(@Body body: DeviceBody): OkResponse

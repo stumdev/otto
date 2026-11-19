@@ -1,7 +1,8 @@
 import type { TxInput } from '../../db/repo.js';
 import { decimalToCents } from '../../lib/money.js';
 import { localDateOf, localToUtcIso } from '../../lib/time.js';
-import type { PluggyTransaction } from './client.js';
+import type { CardTxInput, CreditCardInput, InvestmentInput } from '../../db/wallet.js';
+import type { PluggyAccount, PluggyInvestment, PluggyTransaction } from './client.js';
 
 /** Categorias do categorizador da Pluggy (nível 1/2) traduzidas para exibição e busca em pt-BR. */
 const CATEGORY_PT: Record<string, string> = {
@@ -186,9 +187,11 @@ export function mapPluggyTransaction(t: PluggyTransaction, accountId: string): T
   const plain = description.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
   if ((!method || method === 'OTHER' || method === 'OUTROS') && plain.startsWith('compra no debito')) method = 'CARTAO';
   // "Aplicação RDB" / "Resgate RDB" = dinheiro indo/voltando de uma Caixinha do Nubank
+  let internal = false;
   if (/\brdb\b/.test(plain)) {
     description = t.type === 'CREDIT' ? 'Resgate da caixinha' : 'Guardado na caixinha';
     category = 'Caixinha';
+    internal = true; // dinheiro do próprio dono indo/voltando da reserva: não é entrada nem gasto
   }
   if (counterpart) {
     if (method === 'PIX') description = t.type === 'CREDIT' ? 'Pix recebido' : 'Pix enviado';
@@ -209,6 +212,80 @@ export function mapPluggyTransaction(t: PluggyTransaction, accountId: string): T
     method,
     category,
     status: t.status ?? 'POSTED',
+    internal,
+  };
+}
+
+/** Data/hora local de uma transação da Pluggy (data pura 00:00Z fica no mesmo dia). */
+function localWhen(date: string): { occurredAt: string; localDate: string } {
+  if (MIDNIGHT_UTC.test(date)) {
+    const localDate = date.slice(0, 10);
+    return { occurredAt: localToUtcIso(localDate, 12, 0), localDate };
+  }
+  const occurredAt = new Date(date).toISOString();
+  return { occurredAt, localDate: localDateOf(occurredAt) };
+}
+
+/**
+ * Compra/cobrança no cartão de crédito. No cartão, DEBIT é uma nova cobrança (aumenta a fatura)
+ * e CREDIT é estorno/pagamento (diminui). Guardamos cobrança como positivo.
+ */
+export function mapCardTransaction(t: PluggyTransaction, cardId: string): CardTxInput {
+  const abs = Math.abs(decimalToCents(t.amount));
+  const { occurredAt, localDate } = localWhen(t.date);
+  const meta = t.creditCardMetadata;
+  const billMonth = meta?.billForecastDate && /^\d{4}-\d{2}/.test(meta.billForecastDate) ? meta.billForecastDate.slice(0, 7) : null;
+  const merchant = t.merchant?.name ?? t.merchant?.businessName ?? null;
+  const raw = (t.description ?? t.descriptionRaw ?? '').trim();
+  return {
+    externalId: `pluggy:${t.id}`,
+    cardId,
+    occurredAt,
+    localDate,
+    amountCents: t.type === 'DEBIT' ? abs : -abs,
+    description: (merchant ? cleanName(merchant) : null) ?? (raw || 'Compra no cartão'),
+    category: translateCategory(t.category),
+    status: t.status ?? 'POSTED',
+    billMonth,
+    installmentNumber: meta?.installmentNumber ?? null,
+    totalInstallments: meta?.totalInstallments ?? null,
+  };
+}
+
+export function mapInvestment(i: PluggyInvestment, itemId: string): InvestmentInput {
+  return {
+    id: i.id,
+    itemId,
+    name: i.name.trim(),
+    type: i.type,
+    subtype: i.subtype ?? null,
+    status: i.status ?? null,
+    balanceCents: decimalToCents(i.balance),
+    rate: i.rate ?? null,
+    rateType: i.rateType ?? null,
+    issuer: i.issuer ?? null,
+    dueDate: i.dueDate ? i.dueDate.slice(0, 10) : null,
+    referenceDate: i.date ? i.date.slice(0, 10) : null,
+  };
+}
+
+export function mapCreditCard(a: PluggyAccount, itemId: string): CreditCardInput {
+  const c = a.creditData;
+  const cents = (v: number | null | undefined) => (v === null || v === undefined ? null : decimalToCents(v));
+  return {
+    id: a.id,
+    itemId,
+    name: a.marketingName ?? a.name ?? 'Cartão',
+    number: a.number ? a.number.replace(/\D/g, '').slice(-4) || null : null,
+    brand: c?.brand ?? null,
+    level: c?.level ?? null,
+    // para conta de crédito, balance = fatura em aberto ainda não paga
+    openBillCents: decimalToCents(a.balance),
+    creditLimitCents: cents(c?.creditLimit),
+    availableLimitCents: cents(c?.availableCreditLimit),
+    minimumPaymentCents: cents(c?.minimumPayment),
+    closeDate: c?.balanceCloseDate ? c.balanceCloseDate.slice(0, 10) : null,
+    dueDate: c?.balanceDueDate ? c.balanceDueDate.slice(0, 10) : null,
   };
 }
 
