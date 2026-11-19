@@ -119,6 +119,8 @@ Na primeira abertura, informe:
 
 e o **token** (`APP_TOKEN`). Também dá para usar **Ler QR code**: no servidor, rode `npm run setup-qr -- http://10.0.2.2:8080` e aponte a câmera (o QR contém o token — não compartilhe a tela).
 
+> **Android 17+:** apps com `targetSdk 37` precisam da permissão `ACCESS_LOCAL_NETWORK` para falar com endereços da rede local ([documentação](https://developer.android.com/privacy-and-security/local-network-permission)). O Tony pede essa permissão automaticamente só quando o servidor está num endereço local; um servidor público com HTTPS não precisa dela.
+
 > `http://` só funciona no **build debug**. O release aceita apenas `https://` (`usesCleartextTraffic=false` e `network_security_config` restrito).
 
 ### 2.4 "Simular Pix"
@@ -366,7 +368,8 @@ Endpoints extras além dos pedidos: `GET /v1/status`, `GET /v1/settings`, `GET /
 | Servidor não sobe: "APP_TOKEN precisa ter pelo menos 32 caracteres" | Gere com `npm run gen-token` e coloque no `.env`. |
 | "MOCK_MODE=false exige PLUGGY_…" | Preencha as três variáveis da Pluggy ou volte para `MOCK_MODE=true`. |
 | App: "Token inválido" | O token do app precisa ser exatamente o `APP_TOKEN`. |
-| App: "Sem conexão com o servidor" no emulador | Use `http://10.0.2.2:8080` (não `localhost`) e build **debug**. |
+| App: "Sem conexão com o servidor" no emulador | Use `http://10.0.2.2:8080` (não `localhost`) e build **debug**. No Android 17+ aceite a permissão de **rede local** que o app pede (sem ela o sistema bloqueia conexões a `10.x`, `192.168.x` etc.). |
+| Emulador não inicia ("hypervisor driver is not installed") | Instale o driver: `sdkmanager "extras/google/Android_Emulator_Hypervisor_Driver"` e rode `silent_install.bat` (pasta `SdkextrasgoogleAndroid_Emulator_Hypervisor_Driver`) como administrador. |
 | App no celular não conecta | Suba com `TONY_BIND=0.0.0.0`, mesma rede Wi-Fi, firewall do PC liberando a porta 8080; em release, só `https://`. |
 | Não chegam notificações | Permissão de notificação concedida? Em *Ajustes*, veja a linha "Entrega". Sem FCM, com o app fechado, o intervalo mínimo é ~15 min. Economia de bateria agressiva (alguns fabricantes) atrasa o WorkManager: libere o Tony da otimização de bateria. |
 | Push FCM não chega | `google-services.json` em `app/app/` e app recompilado; `FIREBASE_SERVICE_ACCOUNT_FILE` apontando para o JSON (log do servidor deve dizer "FCM habilitado"); mesmo projeto Firebase nos dois. |

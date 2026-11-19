@@ -37,17 +37,21 @@ class SetupViewModel @Inject constructor(
     fun setUrl(v: String) = _state.update { it.copy(url = v, error = null) }
     fun setToken(v: String) = _state.update { it.copy(token = v, error = null) }
 
-    /** Conteúdo do QR gerado por `npm run setup-qr`: tony://setup?url=...&token=... */
-    fun applyQr(raw: String) {
+    /** Conteúdo do QR gerado por `npm run setup-qr`: tony://setup?url=...&token=... Retorna true se válido. */
+    fun applyQr(raw: String): Boolean {
         val uri = runCatching { raw.toUri() }.getOrNull()
         val url = uri?.takeIf { it.scheme == "tony" && it.host == "setup" }?.getQueryParameter("url")
         val token = uri?.getQueryParameter("token")
         if (url.isNullOrBlank() || token.isNullOrBlank()) {
             _state.update { it.copy(error = "QR code não reconhecido.") }
-            return
+            return false
         }
         _state.update { it.copy(url = url, token = token, error = null) }
-        connect()
+        return true
+    }
+
+    fun localNetworkDenied() = _state.update {
+        it.copy(error = "Sem a permissão de rede local o Tony não alcança um servidor no seu Wi-Fi ou no emulador. Permita e tente de novo.")
     }
 
     fun connect() {

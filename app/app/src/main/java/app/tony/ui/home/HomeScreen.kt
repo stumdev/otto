@@ -90,6 +90,7 @@ fun HomeScreen(
     val haptic = rememberHaptic()
 
     RequestNotificationPermission()
+    RequestLocalNetworkPermission(vm.serverUrl, onGranted = vm::load)
 
     LaunchedEffect(Unit) { vm.messages.collect { toast = it } }
     // ao voltar para a tela: atualiza a sugestão de alertas instantâneos
@@ -300,6 +301,18 @@ private fun HomeSkeleton() {
                 }
             }
         }
+    }
+}
+
+/** Android 17+: servidor na rede local (emulador/Wi-Fi) precisa de ACCESS_LOCAL_NETWORK. */
+@Composable
+private fun RequestLocalNetworkPermission(serverUrl: String?, onGranted: () -> Unit) {
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) onGranted()
+    }
+    LaunchedEffect(serverUrl) {
+        if (app.tony.data.LocalNetwork.needsPermission(context, serverUrl)) launcher.launch(app.tony.data.LocalNetwork.PERMISSION)
     }
 }
 
