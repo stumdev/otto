@@ -1,8 +1,19 @@
 {
   "name": "otto-server",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "description": "Servidor do Otto: sincroniza Open Finance (Pluggy), envia push (FCM) e responde o chat com IA.",
+  "license": "MIT",
+  "author": "stumdev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stumdev/otto.git",
+    "directory": "server"
+  },
+  "homepage": "https://github.com/stumdev/otto#readme",
+  "bugs": {
+    "url": "https://github.com/stumdev/otto/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=22.12"
