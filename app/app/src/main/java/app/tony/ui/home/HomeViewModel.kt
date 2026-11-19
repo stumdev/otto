@@ -48,6 +48,8 @@ class HomeViewModel @Inject constructor(
         load()
     }
 
+    val serverUrl: String? get() = prefs.config.value.serverUrl
+
     /** Recalculado ao voltar para a tela (o usuário pode ter ativado nas configurações). */
     fun refreshInstantHint() {
         val show = !prefs.instantHintDismissed &&

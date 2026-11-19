@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Android 17+: necessária só quando o servidor está na rede local (ex.: emulador, Wi-Fi de casa). -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
     <!-- Só para saber se o app do Nubank está instalado (Android 11+ exige declarar). -->
     <queries>

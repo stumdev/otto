@@ -1,5 +1,7 @@
 package app.tony.ui.setup
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +28,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.tony.data.LocalNetwork
 import app.tony.ui.components.PrimaryButton
 import app.tony.ui.components.ScreenPadding
 import app.tony.ui.components.SecondaryButton
@@ -43,6 +46,15 @@ fun SetupScreen(onDone: () -> Unit, vm: SetupViewModel = hiltViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LaunchedEffect(state.done) { if (state.done) onDone() }
+
+    // Android 17+: servidor na rede local exige a permissão ACCESS_LOCAL_NETWORK
+    val localNetLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.connect() else vm.localNetworkDenied()
+    }
+    val connect = {
+        if (LocalNetwork.needsPermission(context, vm.state.value.url)) localNetLauncher.launch(LocalNetwork.PERMISSION)
+        else vm.connect()
+    }
 
     Column(
         Modifier
@@ -75,14 +87,14 @@ fun SetupScreen(onDone: () -> Unit, vm: SetupViewModel = hiltViewModel()) {
             placeholder = "APP_TOKEN do servidor",
             password = true,
             imeAction = ImeAction.Go,
-            onDone = vm::connect,
+            onDone = { connect() },
         )
         state.error?.let {
             Spacer(Modifier.height(12.dp))
             Text(it, style = TonyType.Caption, color = TonyColors.Text, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Assertive })
         }
         Spacer(Modifier.height(24.dp))
-        PrimaryButton(if (state.connecting) "Conectando…" else "Conectar", onClick = vm::connect, enabled = !state.connecting)
+        PrimaryButton(if (state.connecting) "Conectando…" else "Conectar", onClick = { connect() }, enabled = !state.connecting)
         Spacer(Modifier.height(12.dp))
         SecondaryButton(
             "Ler QR code",
@@ -92,7 +104,7 @@ fun SetupScreen(onDone: () -> Unit, vm: SetupViewModel = hiltViewModel()) {
                 // leitor do Google Play Services: não precisa de permissão de câmera no app
                 val options = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
                 GmsBarcodeScanning.getClient(context, options).startScan()
-                    .addOnSuccessListener { code -> code.rawValue?.let(vm::applyQr) }
+                    .addOnSuccessListener { code -> if (code.rawValue?.let(vm::applyQr) == true) connect() }
             },
         )
         Spacer(Modifier.height(24.dp))
