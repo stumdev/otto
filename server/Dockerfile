@@ -15,7 +15,7 @@ RUN npm run build && npm prune --omit=dev
 # ---------- runtime ----------
 FROM node:24-bookworm-slim
 ENV NODE_ENV=production \
-    DATABASE_PATH=/data/tony.db \
+    DATABASE_PATH=/data/otto.db \
     PORT=8080
 WORKDIR /app
 COPY --from=build --chown=node:node /app/node_modules ./node_modules

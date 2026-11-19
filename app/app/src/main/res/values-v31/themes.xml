@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Tony" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/tony_black</item>
-        <item name="android:colorBackground">@color/tony_black</item>
-        <item name="android:colorAccent">@color/tony_white</item>
+    <style name="Theme.Otto" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/otto_black</item>
+        <item name="android:colorBackground">@color/otto_black</item>
+        <item name="android:colorAccent">@color/otto_white</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:windowSplashScreenBackground">@color/tony_black</item>
+        <item name="android:windowSplashScreenBackground">@color/otto_black</item>
     </style>
 </resources>

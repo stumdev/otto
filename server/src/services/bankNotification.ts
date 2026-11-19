@@ -123,7 +123,7 @@ export async function handleBankNotification(
   if (outcome.kind === 'confirmed') return { status: 'already_confirmed', balanceCents };
   if (outcome.kind === 'no_account') return { status: 'rejected', reason: 'nenhuma conta sincronizada ainda' };
 
-  // notificação do Tony (com o saldo já incluindo esta transação)
+  // notificação do Otto (com o saldo já incluindo esta transação)
   let notification: NotificationRow | null = null;
   const wants = input.amountCents > 0 ? settings.notifyIncoming : settings.notifyOutgoing;
   if (!input.alreadyNotified && wants) {

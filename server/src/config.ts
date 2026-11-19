@@ -17,7 +17,7 @@ const EnvSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(8080),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   TRUST_PROXY: bool(false),
-  DATABASE_PATH: z.string().default('./data/tony.db'),
+  DATABASE_PATH: z.string().default('./data/otto.db'),
 
   APP_TOKEN: z.string().min(32, 'APP_TOKEN precisa ter pelo menos 32 caracteres (use `npm run gen-token`).'),
 

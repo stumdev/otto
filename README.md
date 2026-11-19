@@ -1,4 +1,4 @@
-# Tony
+# Otto
 
 **Seu dinheiro, em tempo real.** Assistente financeiro pessoal para Android: mostra saldo, quanto entrou e saiu hoje, avisa por notificação a cada movimentação, manda um resumo diário e responde perguntas num chat com IA — tudo a partir do **seu** servidor, com dados via Open Finance.
 
@@ -30,7 +30,7 @@
 
 ```
  ┌────────────┐  HTTPS + Bearer   ┌──────────────────────────────┐   X-API-KEY   ┌─────────┐   Open Finance   ┌────────┐
- │  App Tony  │ ────────────────▶ │  Servidor Tony (Fastify)     │ ────────────▶ │ Pluggy  │ ───────────────▶ │ Nubank │
+ │  App Otto  │ ────────────────▶ │  Servidor Otto (Fastify)     │ ────────────▶ │ Pluggy  │ ───────────────▶ │ Nubank │
  │  (Android) │ ◀──── SSE (chat)  │  SQLite · jobs · outbox      │ ◀── webhooks  │         │                  │        │
  └─────▲──────┘                   │                              │               └─────────┘                  └────────┘
        │ push (dados)             │  tool calling (só agregados) │
@@ -46,26 +46,26 @@
 - **Valores sempre em centavos (inteiros).** "Hoje", "semana" (a partir de segunda) e "mês" no fuso `America/Sao_Paulo`, independente do fuso do servidor.
 - **Chat:** streaming por SSE. A IA usa *tool calling* — `get_balance`, `get_period_summary(from,to)`, `get_top_transactions(period,direction,limit)`, `search_transactions(query,period)` — que rodam localmente no SQLite e devolvem só agregados ou no máximo 10 itens. Retry com backoff exponencial e troca de provedor em 429/5xx/erros de rede. Sem chave, um motor de regras responde (saldo, entrou/saiu, maiores saídas, gastos por nome).
 
-> ⚠️ **O Open Finance sozinho não é tempo real.** Pela documentação da Pluggy, itens de Open Finance são atualizados automaticamente **uma vez por dia**, e no **Meu Pluggy** (o caminho gratuito para uso pessoal) os dados são renovados **a cada 24 h** e não podem ser atualizados manualmente. Por isso o Tony tem os **alertas instantâneos** (abaixo), que leem a notificação do próprio app do Nubank no celular.
+> ⚠️ **O Open Finance sozinho não é tempo real.** Pela documentação da Pluggy, itens de Open Finance são atualizados automaticamente **uma vez por dia**, e no **Meu Pluggy** (o caminho gratuito para uso pessoal) os dados são renovados **a cada 24 h** e não podem ser atualizados manualmente. Por isso o Otto tem os **alertas instantâneos** (abaixo), que leem a notificação do próprio app do Nubank no celular.
 
 ### Alertas instantâneos (leitura da notificação do Nubank)
 
 ```
- Pix cai ─▶ app do Nubank mostra a notificação ─▶ Tony (no mesmo celular) lê o texto
+ Pix cai ─▶ app do Nubank mostra a notificação ─▶ Otto (no mesmo celular) lê o texto
           ─▶ extrai valor, entrada/saída, nome e tipo ─▶ POST /v1/events/bank-notification
           ─▶ servidor grava como PROVISÓRIA (já entra no saldo) e devolve o aviso com saldo
           ─▶ horas depois a Pluggy entrega a oficial ─▶ casada com a provisória, sem novo aviso
 ```
 
-- **Em segundos**, sem senha, sem scraping, sem custo. Só funciona com o app do Nubank instalado **e com as notificações dele ativas** no mesmo celular do Tony.
-- O Tony só lê notificações do pacote `com.nu.production`; todas as outras são descartadas sem leitura do conteúdo. **O texto bruto não sai do aparelho**: ao servidor vão só valor, nome da contraparte, tipo (Pix/TED/débito) e horário, mais uma impressão digital SHA-256 para deduplicar.
+- **Em segundos**, sem senha, sem scraping, sem custo. Só funciona com o app do Nubank instalado **e com as notificações dele ativas** no mesmo celular do Otto.
+- O Otto só lê notificações do pacote `com.nu.production`; todas as outras são descartadas sem leitura do conteúdo. **O texto bruto não sai do aparelho**: ao servidor vão só valor, nome da contraparte, tipo (Pix/TED/débito) e horário, mais uma impressão digital SHA-256 para deduplicar.
 - **Casamento com o Open Finance:** a transação oficial com o **mesmo valor e sinal**, em até **±1 dia**, substitui a provisória (a mais próxima no horário) e **não notifica de novo**. Se a Pluggy entregar antes da notificação, o servidor só vincula. Provisórias nunca confirmadas saem do saldo depois de `PROVISIONAL_TTL_HOURS` (padrão 96 h). Na lista elas aparecem como "· a confirmar".
 - **Servidor fora do ar:** o app mostra o aviso local na hora (sem saldo) e reenvia em segundo plano marcando que já avisou, para não haver aviso duplicado.
 - **O leitor é conservador.** Ele só aceita quando encontra **um** valor em R$ e uma direção inequívoca. Ignora cartão de **crédito**, fatura, Pix agendado, **pedido de Pix**, falha, estorno, caixinhas e similares, que continuam chegando pelo Open Finance.
 
-**Como ativar:** *Ajustes → Alertas instantâneos → Ativar acesso a notificações* e ligue o Tony. No **Android 13+, com o APK instalado fora da Play Store**, a opção aparece bloqueada ("configuração restrita"). Nesse caso, abra *Informações do app* (botão logo abaixo), toque em **⋮ → Permitir configurações restritas**, volte e ative. Alguns fabricantes encerram serviços em segundo plano: tire o Tony da otimização de bateria.
+**Como ativar:** *Ajustes → Alertas instantâneos → Ativar acesso a notificações* e ligue o Otto. No **Android 13+, com o APK instalado fora da Play Store**, a opção aparece bloqueada ("configuração restrita"). Nesse caso, abra *Informações do app* (botão logo abaixo), toque em **⋮ → Permitir configurações restritas**, volte e ative. Alguns fabricantes encerram serviços em segundo plano: tire o Otto da otimização de bateria.
 
-> **Limitação honesta:** o formato das notificações do Nubank não é documentado e pode mudar a qualquer atualização do app dele. As regras foram escritas a partir de formatos plausíveis, **não de capturas reais**. Por isso existe *Ajustes → Alertas instantâneos → Notificações não reconhecidas*, que guarda (cifradas, só no aparelho) as últimas 20 notificações do Nubank com valor em R$ que o leitor ignorou. Se algum Pix ou débito na conta estiver lá, use **Copiar** e acrescente o texto aos testes em `app/app/src/test/java/app/tony/bank/BankNotificationParserTest.kt` para ajustar `BankNotificationParser.kt`. No build debug, *Simular notificação do Nubank* testa o caminho completo sem fazer um Pix.
+> **Limitação honesta:** o formato das notificações do Nubank não é documentado e pode mudar a qualquer atualização do app dele. As regras foram escritas a partir de formatos plausíveis, **não de capturas reais**. Por isso existe *Ajustes → Alertas instantâneos → Notificações não reconhecidas*, que guarda (cifradas, só no aparelho) as últimas 20 notificações do Nubank com valor em R$ que o leitor ignorou. Se algum Pix ou débito na conta estiver lá, use **Copiar** e acrescente o texto aos testes em `app/app/src/test/java/app/otto/bank/BankNotificationParserTest.kt` para ajustar `BankNotificationParser.kt`. No build debug, *Simular notificação do Nubank* testa o caminho completo sem fazer um Pix.
 
 ---
 
@@ -86,7 +86,7 @@ curl http://127.0.0.1:8080/health        # {"status":"ok","version":"1.0.0","mod
 Por padrão a porta só escuta em `127.0.0.1`. Para testar com o celular na mesma rede Wi-Fi:
 
 ```bash
-TONY_BIND=0.0.0.0 docker compose up -d
+OTTO_BIND=0.0.0.0 docker compose up -d
 ```
 
 ### 2.2 Servidor sem Docker (Node 24 LTS)
@@ -95,7 +95,7 @@ TONY_BIND=0.0.0.0 docker compose up -d
 cd server
 npm ci
 npm run gen-token                         # copie para APP_TOKEN no ../.env
-# no .env, para rodar fora do Docker: DATABASE_PATH=./data/tony.db
+# no .env, para rodar fora do Docker: DATABASE_PATH=./data/otto.db
 npm run build && npm start                # ou: npm run dev
 ```
 
@@ -114,18 +114,18 @@ Na primeira abertura, informe:
 | Onde o app roda | Endereço do servidor |
 |---|---|
 | Emulador | `http://10.0.2.2:8080` |
-| Celular na mesma rede | `http://<IP-do-computador>:8080` (suba com `TONY_BIND=0.0.0.0`) |
-| Produção | `https://tony.seudominio.com` |
+| Celular na mesma rede | `http://<IP-do-computador>:8080` (suba com `OTTO_BIND=0.0.0.0`) |
+| Produção | `https://otto.seudominio.com` |
 
 e o **token** (`APP_TOKEN`). Também dá para usar **Ler QR code**: no servidor, rode `npm run setup-qr -- http://10.0.2.2:8080` e aponte a câmera (o QR contém o token — não compartilhe a tela).
 
-> **Android 17+:** apps com `targetSdk 37` precisam da permissão `ACCESS_LOCAL_NETWORK` para falar com endereços da rede local ([documentação](https://developer.android.com/privacy-and-security/local-network-permission)). O Tony pede essa permissão automaticamente só quando o servidor está num endereço local; um servidor público com HTTPS não precisa dela.
+> **Android 17+:** apps com `targetSdk 37` precisam da permissão `ACCESS_LOCAL_NETWORK` para falar com endereços da rede local ([documentação](https://developer.android.com/privacy-and-security/local-network-permission)). O Otto pede essa permissão automaticamente só quando o servidor está num endereço local; um servidor público com HTTPS não precisa dela.
 
 > `http://` só funciona no **build debug**. O release aceita apenas `https://` (`usesCleartextTraffic=false` e `network_security_config` restrito).
 
 ### 2.4 "Simular Pix"
 
-No build **debug**, faça **pressão longa na marca do Tony** (canto superior esquerdo da tela Início). O servidor cria um Pix fictício, atualiza o saldo e dispara a notificação — `Entrou R$ 1.800,00 · Pix de João Silva · Saldo R$ 48.215,90`. Com o app aberto ela aparece como um cartão no topo; com o app em segundo plano, como notificação do sistema.
+No build **debug**, faça **pressão longa na marca do Otto** (canto superior esquerdo da tela Início). O servidor cria um Pix fictício, atualiza o saldo e dispara a notificação — `Entrou R$ 1.800,00 · Pix de João Silva · Saldo R$ 48.215,90`. Com o app aberto ela aparece como um cartão no topo; com o app em segundo plano, como notificação do sistema.
 
 Pelo terminal:
 
@@ -154,7 +154,7 @@ Para receber em segundos com o app fechado, configure o FCM (seção 3.3).
 
 O caminho oficial e **gratuito para uso pessoal** é o **Meu Pluggy** + conector **MeuPluggy** (até 5 conexões, sem uso comercial; [guia](https://docs.pluggy.ai/docs/guides/meu-pluggy-personal-use)):
 
-1. Crie uma conta em **[meu.pluggy.ai](https://meu.pluggy.ai)** e conecte o **Nubank** lá. A autorização acontece no app do Nubank (consentimento do Open Finance). **Você nunca digita a senha do banco no Tony.**
+1. Crie uma conta em **[meu.pluggy.ai](https://meu.pluggy.ai)** e conecte o **Nubank** lá. A autorização acontece no app do Nubank (consentimento do Open Finance). **Você nunca digita a senha do banco no Otto.**
 2. Entre no **[Dashboard da Pluggy](https://dashboard.pluggy.ai)** com a mesma conta. Em *Applications*, crie uma aplicação e anote o **Client ID**; gere o **Client Secret** (aparece uma vez só).
 3. Em *Applications → sua aplicação → Demo → Connect Account*, escolha o conector **MeuPluggy** (não o Nubank direto) e entre com sua conta do Meu Pluggy. Cada banco vira um **item**.
 4. Copie o **itemId** do Nubank (em *Connected Items*).
@@ -167,16 +167,16 @@ O caminho oficial e **gratuito para uso pessoal** é o **Meu Pluggy** + conector
    ```
 6. Confira: `cd server && npm run pluggy:check` (mostra status do item, validade do consentimento e as contas — sem transações).
 
-A autorização do Meu Pluggy vale **1 ano** (`consentExpiresAt`). Ao expirar, o item vai para `LOGIN_ERROR`/`USER_AUTHORIZATION_EXPIRED`; o Tony recebe o webhook `item/error` e te avisa por notificação. Para renovar, repita o passo 3 (e confira se o itemId mudou).
+A autorização do Meu Pluggy vale **1 ano** (`consentExpiresAt`). Ao expirar, o item vai para `LOGIN_ERROR`/`USER_AUTHORIZATION_EXPIRED`; o Otto recebe o webhook `item/error` e te avisa por notificação. Para renovar, repita o passo 3 (e confira se o itemId mudou).
 
-Na primeira sincronização, o Tony importa os últimos 90 dias **sem notificar**. Depois, só notifica transações novas (no máximo `NOTIFY_MAX_AGE_HOURS` de idade).
+Na primeira sincronização, o Otto importa os últimos 90 dias **sem notificar**. Depois, só notifica transações novas (no máximo `NOTIFY_MAX_AGE_HOURS` de idade).
 
 ### 3.2 Webhook da Pluggy
 
 Webhooks exigem uma URL **HTTPS pública na porta 443** (veja a seção 6). Depois:
 
 ```ini
-PUBLIC_BASE_URL=https://tony.seudominio.com
+PUBLIC_BASE_URL=https://otto.seudominio.com
 PLUGGY_WEBHOOK_HEADER_SECRET=<npm run gen-token>
 ```
 
@@ -194,23 +194,23 @@ Opcional: libere no firewall só o IP de origem dos webhooks da Pluggy, `52.67.1
 ### 3.3 Firebase Cloud Messaging (push)
 
 1. Crie um projeto em **[console.firebase.google.com](https://console.firebase.google.com)**.
-2. Adicione um app **Android** com o pacote **`app.tony`**. Baixe o `google-services.json` e coloque em **`app/app/google-services.json`** (está no `.gitignore`). O build detecta o arquivo e liga o plugin do Google Services automaticamente.
+2. Adicione um app **Android** com o pacote **`app.otto`**. Baixe o `google-services.json` e coloque em **`app/app/google-services.json`** (está no `.gitignore`). O build detecta o arquivo e liga o plugin do Google Services automaticamente.
 3. Em *Configurações do projeto → Contas de serviço → Gerar nova chave privada*, baixe o JSON e salve como `secrets/firebase-service-account.json` (raiz do repo; também ignorado pelo git).
 4. No `.env`:
-   - Docker: `FIREBASE_SERVICE_ACCOUNT_FILE=/run/secrets/tony/firebase-service-account.json`
+   - Docker: `FIREBASE_SERVICE_ACCOUNT_FILE=/run/secrets/otto/firebase-service-account.json`
    - Sem Docker: `FIREBASE_SERVICE_ACCOUNT_FILE=../secrets/firebase-service-account.json`
 5. Recompile o app (`./gradlew assembleDebug`), reinicie o servidor e use **Ajustes → Testar notificação**. A linha "Entrega" nos Ajustes mostra se o push está ativo.
 
-O servidor manda mensagens **só de dados** (prioridade alta); o app monta a notificação com o canal certo (`entradas`, `saidas`, `resumo`), o ícone monocromático do Tony e o toque abrindo a tela certa.
+O servidor manda mensagens **só de dados** (prioridade alta); o app monta a notificação com o canal certo (`entradas`, `saidas`, `resumo`), o ícone monocromático do Otto e o toque abrindo a tela certa.
 
 ### 3.4 IA: Groq (principal) e Gemini (fallback)
 
-- **Groq**: crie uma chave em [console.groq.com/keys](https://console.groq.com/keys) → `GROQ_API_KEY`. Modelo padrão `openai/gpt-oss-120b` (em produção na Groq em nov/2026; não suporta chamadas de ferramenta em paralelo, o que o Tony não usa).
+- **Groq**: crie uma chave em [console.groq.com/keys](https://console.groq.com/keys) → `GROQ_API_KEY`. Modelo padrão `openai/gpt-oss-120b` (em produção na Groq em nov/2026; não suporta chamadas de ferramenta em paralelo, o que o Otto não usa).
 - **Gemini**: chave em [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → `GEMINI_API_KEY`. Modelo padrão `gemini-3.8-flash` (Flash estável vigente), via endpoint compatível com OpenAI.
 
 Provedor, modelo e base URL são configuráveis (`AI_PROVIDER_ORDER`, `GROQ_*`, `GEMINI_*`). Sem nenhuma chave, o chat responde com o motor de regras e avisa "Modo offline".
 
-> **Atenção ao Gemini grátis:** no plano gratuito, o Google informa que o conteúdo enviado **pode ser usado para melhorar os produtos dele**. Por isso o Groq é o principal. Quando o Tony cai para o Gemini, ele envia **apenas** o que está descrito na seção 4 (resumos e no máximo 10 lançamentos por consulta), nunca o extrato completo. Se não quiser isso, deixe `GEMINI_API_KEY` vazio.
+> **Atenção ao Gemini grátis:** no plano gratuito, o Google informa que o conteúdo enviado **pode ser usado para melhorar os produtos dele**. Por isso o Groq é o principal. Quando o Otto cai para o Gemini, ele envia **apenas** o que está descrito na seção 4 (resumos e no máximo 10 lançamentos por consulta), nunca o extrato completo. Se não quiser isso, deixe `GEMINI_API_KEY` vazio.
 
 ### 3.5 Resumo do `.env` para produção
 
@@ -220,9 +220,9 @@ TRUST_PROXY=true
 APP_TOKEN=<48+ caracteres aleatórios>
 MOCK_MODE=false
 PLUGGY_CLIENT_ID=... / PLUGGY_CLIENT_SECRET=... / PLUGGY_ITEM_IDS=...
-PUBLIC_BASE_URL=https://tony.seudominio.com
+PUBLIC_BASE_URL=https://otto.seudominio.com
 PLUGGY_WEBHOOK_HEADER_SECRET=... / PLUGGY_WEBHOOK_SIGNING_SECRET=whsec_...
-FIREBASE_SERVICE_ACCOUNT_FILE=/run/secrets/tony/firebase-service-account.json
+FIREBASE_SERVICE_ACCOUNT_FILE=/run/secrets/otto/firebase-service-account.json
 GROQ_API_KEY=... / GEMINI_API_KEY=... (opcional)
 ```
 
@@ -246,7 +246,7 @@ Ou seja: nomes de contrapartes só saem quando a pergunta exige ("qual foi minha
 ## 5. Segurança
 
 - **Nenhum segredo no repositório.** Tudo em `.env` / `secrets/`; o `.gitignore` cobre `.env`, `google-services.json`, contas de serviço, keystores, `keystore.properties`, `*.db` e `data/`.
-- **Senha do banco nunca passa pelo Tony.** Só consentimento Open Finance via Pluggy.
+- **Senha do banco nunca passa pelo Otto.** Só consentimento Open Finance via Pluggy.
 - **Autenticação do app:** `Authorization: Bearer <APP_TOKEN>` (mínimo 32 caracteres; o servidor não sobe sem ele), comparado em tempo constante. Rate limit global (120/min) e por rota (chat 20/min, sync 6/min). CORS fechado. Cabeçalhos de segurança via Helmet. Corpo limitado a 256 KB. Validação Zod em tudo.
 - **Logs:** cabeçalhos `Authorization` e `X-Pluggy-Signature` são redigidos; valores de transações e corpos de erro dos provedores de IA não são registrados.
 - **Contêiner:** usuário não-root, sistema de arquivos somente leitura (exceto o volume `/data`), `no-new-privileges`, todas as *capabilities* removidas, porta presa em `127.0.0.1`.
@@ -262,7 +262,7 @@ Nunca abra a porta 8080 para a internet. Duas opções:
 ### Opção A — Cloudflare Tunnel (sem abrir portas no roteador)
 
 1. No painel da Cloudflare: *Zero Trust → Networks → Tunnels → Create tunnel* (tipo *cloudflared*). Copie o token.
-2. Em *Public Hostname*, aponte `tony.seudominio.com` para `http://tony:8080`.
+2. Em *Public Hostname*, aponte `otto.seudominio.com` para `http://otto:8080`.
 3. Suba:
    ```bash
    CLOUDFLARE_TUNNEL_TOKEN=<token> docker compose --profile tunnel up -d
@@ -274,12 +274,12 @@ Num VPS com as portas 80/443 abertas e o DNS apontando para ele:
 
 ```caddyfile
 # /etc/caddy/Caddyfile
-tony.seudominio.com {
+otto.seudominio.com {
     reverse_proxy 127.0.0.1:8080
 }
 ```
 
-Em ambos os casos use `TRUST_PROXY=true` e `PUBLIC_BASE_URL=https://tony.seudominio.com`.
+Em ambos os casos use `TRUST_PROXY=true` e `PUBLIC_BASE_URL=https://otto.seudominio.com`.
 
 ---
 
@@ -287,13 +287,13 @@ Em ambos os casos use `TRUST_PROXY=true` e `PUBLIC_BASE_URL=https://tony.seudomi
 
 1. Gere uma chave (uma vez só; guarde fora do repositório e faça backup):
    ```bash
-   keytool -genkeypair -v -keystore ~/tony-release.jks -alias tony -keyalg RSA -keysize 4096 -validity 10000
+   keytool -genkeypair -v -keystore ~/otto-release.jks -alias otto -keyalg RSA -keysize 4096 -validity 10000
    ```
 2. Crie `app/keystore.properties` (ignorado pelo git):
    ```properties
-   storeFile=C:/caminho/para/tony-release.jks
+   storeFile=C:/caminho/para/otto-release.jks
    storePassword=...
-   keyAlias=tony
+   keyAlias=otto
    keyPassword=...
    ```
 3. Gere: `cd app && ./gradlew assembleRelease` → `app/app/build/outputs/apk/release/app-release.apk` (R8/minificação ligados).
@@ -309,7 +309,7 @@ O backup usa a API online do SQLite (consistente mesmo com o servidor rodando) e
 
 ```bash
 # Docker
-docker compose exec tony node dist/cli/backup.js /data/backups
+docker compose exec otto node dist/cli/backup.js /data/backups
 # sem Docker
 cd server && npm run backup -- ./backups
 ```
@@ -317,10 +317,10 @@ cd server && npm run backup -- ./backups
 Agende com cron (ex.: todo dia às 3h):
 
 ```cron
-0 3 * * * cd /caminho/tony && docker compose exec -T tony node dist/cli/backup.js /data/backups
+0 3 * * * cd /caminho/otto && docker compose exec -T otto node dist/cli/backup.js /data/backups
 ```
 
-Os backups contêm seu histórico financeiro: guarde-os cifrados (ex.: `restic`, `age`) se saírem da máquina. Para restaurar: pare o servidor, substitua `data/tony.db` pelo backup e suba de novo.
+Os backups contêm seu histórico financeiro: guarde-os cifrados (ex.: `restic`, `age`) se saírem da máquina. Para restaurar: pare o servidor, substitua `data/otto.db` pelo backup e suba de novo.
 
 ---
 
@@ -370,12 +370,13 @@ Endpoints extras além dos pedidos: `GET /v1/status`, `GET /v1/settings`, `GET /
 | App: "Token inválido" | O token do app precisa ser exatamente o `APP_TOKEN`. |
 | App: "Sem conexão com o servidor" no emulador | Use `http://10.0.2.2:8080` (não `localhost`) e build **debug**. No Android 17+ aceite a permissão de **rede local** que o app pede (sem ela o sistema bloqueia conexões a `10.x`, `192.168.x` etc.). |
 | Emulador não inicia ("hypervisor driver is not installed") | Instale o driver: `sdkmanager "extras/google/Android_Emulator_Hypervisor_Driver"` e rode `silent_install.bat` (pasta `SdkextrasgoogleAndroid_Emulator_Hypervisor_Driver`) como administrador. |
-| App no celular não conecta | Suba com `TONY_BIND=0.0.0.0`, mesma rede Wi-Fi, firewall do PC liberando a porta 8080; em release, só `https://`. |
-| Não chegam notificações | Permissão de notificação concedida? Em *Ajustes*, veja a linha "Entrega". Sem FCM, com o app fechado, o intervalo mínimo é ~15 min. Economia de bateria agressiva (alguns fabricantes) atrasa o WorkManager: libere o Tony da otimização de bateria. |
+| App no celular não conecta | Suba com `OTTO_BIND=0.0.0.0`, mesma rede Wi-Fi, firewall do PC liberando a porta 8080; em release, só `https://`. |
+| Não chegam notificações | Permissão de notificação concedida? Em *Ajustes*, veja a linha "Entrega". Sem FCM, com o app fechado, o intervalo mínimo é ~15 min. Economia de bateria agressiva (alguns fabricantes) atrasa o WorkManager: libere o Otto da otimização de bateria. |
+| Build mostra "AVISO: google-services.json não tem o app Android 'app.otto'" | O arquivo foi gerado para outro pacote (por exemplo, de antes da mudança de nome). No Firebase, adicione um app Android com o pacote `app.otto`, baixe o `google-services.json` de novo e recompile. Até lá o app funciona com notificação local. |
 | Push FCM não chega | `google-services.json` em `app/app/` e app recompilado; `FIREBASE_SERVICE_ACCOUNT_FILE` apontando para o JSON (log do servidor deve dizer "FCM habilitado"); mesmo projeto Firebase nos dois. |
 | Transações reais não aparecem | `npm run pluggy:check`. Com Meu Pluggy, os dados renovam a cada 24 h. Item em `LOGIN_ERROR`? Renove a autorização (seção 3.1). |
 | Webhooks recusados (401) | Segredos no `.env` iguais aos do Dashboard/`register-webhook`; relógio do servidor sincronizado (NTP) — a assinatura tem tolerância de 5 min. |
-| Alertas instantâneos não chegam | *Ajustes → Alertas instantâneos* diz "Ativo"? Notificações do Nubank ligadas no celular? Veja *Notificações não reconhecidas*: se o Pix está lá, o formato mudou (seção 1). Android 13+ fora da loja: "Permitir configurações restritas". Tire o Tony da otimização de bateria. |
+| Alertas instantâneos não chegam | *Ajustes → Alertas instantâneos* diz "Ativo"? Notificações do Nubank ligadas no celular? Veja *Notificações não reconhecidas*: se o Pix está lá, o formato mudou (seção 1). Android 13+ fora da loja: "Permitir configurações restritas". Tire o Otto da otimização de bateria. |
 | Pix aparece duas vezes na lista | Só acontece se o valor oficial for diferente do lido na notificação (o casamento exige o mesmo valor). A provisória expira sozinha em `PROVISIONAL_TTL_HOURS`. |
 | Chat diz "Modo offline" | Nenhuma chave de IA configurada, ou todos os provedores falharam (veja o log `falha no provedor de IA`). |
 | Docker: erro ao compilar `better-sqlite3` | A imagem de build já instala `python3 make g++`; confira se há rede no build. |

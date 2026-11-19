@@ -107,7 +107,7 @@ export async function processWebhook(d: WebhookDeps, p: WebhookPayload): Promise
         body:
           code === 'USER_AUTHORIZATION_EXPIRED'
             ? 'A autorização expirou. Renove no painel da Pluggy para voltar a receber movimentações.'
-            : 'O Tony não conseguiu atualizar os dados. Veja o painel da Pluggy.',
+            : 'O Otto não conseguiu atualizar os dados. Veja o painel da Pluggy.',
         target: 'settings',
       });
       return 'alerta registrado';

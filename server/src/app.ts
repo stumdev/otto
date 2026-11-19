@@ -41,7 +41,7 @@ export interface AppOptions {
   disableJobs?: boolean;
 }
 
-export interface TonyServices {
+export interface OttoServices {
   notifier: Notifier;
   mock?: MockBank;
   sync?: PluggySync;
@@ -85,7 +85,7 @@ const SimulateBody = z
 /** Quantas mensagens de histórico vão para a IA (as mais recentes). */
 const CHAT_HISTORY_LIMIT = 12;
 
-export async function buildApp(opts: AppOptions): Promise<{ app: FastifyInstance; services: TonyServices }> {
+export async function buildApp(opts: AppOptions): Promise<{ app: FastifyInstance; services: OttoServices }> {
   const { config, db } = opts;
   const now = opts.now ?? (() => new Date());
 
@@ -125,7 +125,7 @@ export async function buildApp(opts: AppOptions): Promise<{ app: FastifyInstance
     });
   }
 
-  const services: TonyServices = {
+  const services: OttoServices = {
     notifier,
     mock,
     sync,
@@ -297,7 +297,7 @@ export async function buildApp(opts: AppOptions): Promise<{ app: FastifyInstance
         id: 0,
         kind: 'test',
         title: 'Notificação de teste',
-        body: 'Se você está vendo isto, o push do Tony está funcionando.',
+        body: 'Se você está vendo isto, o push do Otto está funcionando.',
         target: 'settings',
       });
       return { ok: true, push: true, delivered: r.successCount };
