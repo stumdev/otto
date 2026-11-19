@@ -127,4 +127,31 @@ describe('mapeamento Pluggy', () => {
     expect(credit.description).toBe('Pix recebido');
     expect(credit.externalId).toBe('pluggy:abc');
   });
+
+  // formatos reais vistos na conta do Nubank via Meu Pluggy (nomes trocados)
+  it('separa "tipo|contraparte" vindo do Nubank', () => {
+    const d = '2026-11-19T12:00:00.000Z';
+    const recv = mapPluggyTransaction({ ...base, type: 'CREDIT', amount: 50, date: d, operationType: 'PIX', description: 'Transferência Recebida|FULANO DE TAL' }, 'acc');
+    expect(recv).toMatchObject({ description: 'Pix recebido', counterpart: 'Fulano de Tal', method: 'PIX' });
+    const sent = mapPluggyTransaction({ ...base, date: d, operationType: 'PIX', description: 'Transferência enviada pelo Pix|Beltrana Souza' }, 'acc');
+    expect(sent).toMatchObject({ description: 'Pix enviado', counterpart: 'Beltrana Souza' });
+    const deb = mapPluggyTransaction({ ...base, date: d, operationType: 'OTHER', description: 'Compra no débito|MINIMERCADO CENTRAL' }, 'acc');
+    expect(deb).toMatchObject({ description: 'Compra no débito', counterpart: 'Minimercado Central', method: 'CARTAO' });
+    const spaces = mapPluggyTransaction({ ...base, date: d, operationType: 'OTHER', description: 'Compra no débito|DL          *UberRides' }, 'acc');
+    expect(spaces.counterpart).toBe('DL *UberRides');
+    const noName = mapPluggyTransaction({ ...base, date: d, operationType: 'PIX', description: 'Transferência enviada pelo Pix' }, 'acc');
+    expect(noName).toMatchObject({ description: 'Transferência enviada pelo Pix', counterpart: null });
+  });
+
+  it('reconhece as caixinhas (RDB)', () => {
+    const d = '2026-11-19T12:00:00.000Z';
+    expect(mapPluggyTransaction({ ...base, date: d, operationType: 'OTHER', description: 'Aplicação RDB' }, 'acc')).toMatchObject({
+      description: 'Guardado na caixinha',
+      category: 'Caixinha',
+      amountCents: -21245,
+    });
+    expect(
+      mapPluggyTransaction({ ...base, type: 'CREDIT', amount: 100, date: d, operationType: 'OTHER', description: 'Resgate RDB' }, 'acc'),
+    ).toMatchObject({ description: 'Resgate da caixinha', category: 'Caixinha', amountCents: 10000 });
+  });
 });

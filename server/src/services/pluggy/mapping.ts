@@ -88,15 +88,32 @@ export function mapPluggyTransaction(t: PluggyTransaction, accountId: string): T
     hasTime = true;
   }
 
-  const method = t.paymentData?.paymentMethod ?? t.operationType ?? null;
+  let method = t.paymentData?.paymentMethod ?? t.operationType ?? null;
   const party = t.type === 'CREDIT' ? t.paymentData?.payer : t.paymentData?.receiver;
-  const counterpart = cleanName(party?.name) ?? cleanName(t.merchant?.name) ?? cleanName(t.merchant?.businessName);
+  let counterpart = cleanName(party?.name) ?? cleanName(t.merchant?.name) ?? cleanName(t.merchant?.businessName);
+  let category = translateCategory(t.category);
 
   let description = (t.description ?? t.descriptionRaw ?? '').trim() || 'Movimentação';
+  // O Nubank (Open Finance) manda muitas vezes "tipo|contraparte", ex.:
+  // "Transferência Recebida|Fulano de Tal", "Compra no débito|MINIMERCADO X".
+  const pipe = description.indexOf('|');
+  if (pipe > 0) {
+    const right = description.slice(pipe + 1).replace(/\s+/g, ' ').trim();
+    description = description.slice(0, pipe).trim() || 'Movimentação';
+    counterpart = counterpart ?? cleanName(right);
+  }
+  const plain = description.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+  if ((!method || method === 'OTHER' || method === 'OUTROS') && plain.startsWith('compra no debito')) method = 'CARTAO';
+  // "Aplicação RDB" / "Resgate RDB" = dinheiro indo/voltando de uma Caixinha do Nubank
+  if (/\brdb\b/.test(plain)) {
+    description = t.type === 'CREDIT' ? 'Resgate da caixinha' : 'Guardado na caixinha';
+    category = 'Caixinha';
+  }
   if (counterpart) {
     if (method === 'PIX') description = t.type === 'CREDIT' ? 'Pix recebido' : 'Pix enviado';
     else if (method === 'TED') description = t.type === 'CREDIT' ? 'TED recebida' : 'TED enviada';
     else if (method === 'BOLETO') description = 'Pagamento de boleto';
+    else if (method === 'CARTAO') description = 'Compra no débito';
   }
 
   return {
@@ -109,7 +126,7 @@ export function mapPluggyTransaction(t: PluggyTransaction, accountId: string): T
     description,
     counterpart,
     method,
-    category: translateCategory(t.category),
+    category,
     status: t.status ?? 'POSTED',
   };
 }
