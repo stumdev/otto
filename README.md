@@ -1,13 +1,64 @@
-# Otto
+<div align="center">
 
-**Seu dinheiro, em tempo real.** Assistente financeiro para Android: mostra saldo, quanto entrou e saiu hoje, avisa por notificação a cada movimentação, manda um resumo diário e responde perguntas num chat com IA, com dados do Nubank via Open Finance.
+<img src="docs/banner.svg" alt="Otto" width="100%">
 
-**Para quem usa:** instala o app → cria uma conta (e-mail e senha) → conecta o Nubank → pronto. Nada de servidor, endereço ou token. O endereço do servidor vai embutido no app (seção 2.3); quem opera o serviço sobe o servidor uma vez.
+<br>
 
-- `server/` — Node.js 24 + TypeScript + Fastify + SQLite (better-sqlite3) + Zod
-- `app/` — Android nativo: Kotlin + Jetpack Compose (tema próprio preto e branco), Hilt, Retrofit/OkHttp, kotlinx.serialization
-- `docker-compose.yml` — sobe o servidor (e, opcionalmente, um Cloudflare Tunnel)
-- `.env.example` — todas as variáveis, documentadas
+[![CI](https://github.com/stumdev/otto/actions/workflows/ci.yml/badge.svg)](https://github.com/stumdev/otto/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-000000.svg)](LICENSE)
+![Node](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Kotlin](https://img.shields.io/badge/Kotlin-Compose-7F52FF?logo=kotlin&logoColor=white)
+![Android](https://img.shields.io/badge/Android-8%2B-3DDC84?logo=android&logoColor=white)
+![Open Finance](https://img.shields.io/badge/Open%20Finance-Pluggy-111111)
+![IA](https://img.shields.io/badge/IA-Groq%20%2B%20Gemini-F55036)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-000000.svg)](CONTRIBUTING.md)
+
+**Assistente financeiro para Android: saldo, avisos a cada movimentação e um chat com IA que conhece a sua conta.**
+
+[Instalação](#2-rodar-em-modo-mock-sem-nenhuma-chave) · [Segurança](#5-segurança) · [API](#12-referência-da-api) · [Contribuir](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
+
+</div>
+
+---
+
+## Sobre
+
+O Otto mostra o saldo da sua conta, quanto entrou e saiu hoje, avisa por notificação a cada movimentação, manda um resumo diário e responde perguntas num chat com IA, com dados do Nubank via Open Finance.
+
+**Para quem usa:** instala o app → cria uma conta (e-mail e senha) → conecta o Nubank → pronto. Nada de servidor, endereço ou token. O endereço do servidor vai embutido no app (seção [2.3](#23-app)); quem opera o serviço sobe o servidor uma vez.
+
+> Projeto em fase de testes. A conexão com o Nubank usa a [Pluggy](https://pluggy.ai); conectar contas de outras pessoas depende do plano da sua aplicação na Pluggy (veja a seção [3.1](#31-pluggy--nubank-open-finance)).
+
+## Destaques
+
+- 💸 **Saldo e movimentações em tempo real:** entrou, saiu, semana, gráfico dos últimos 7 dias, caixinhas e cartão de crédito (fatura, limite e próximas faturas).
+- ⚡ **Alertas instantâneos:** o app lê a notificação do próprio Nubank no celular e avisa em segundos, sem esperar o Open Finance. O texto bruto nunca sai do aparelho.
+- 💬 **Chat com IA que não "chuta":** a IA usa *tool calling*; as contas são feitas no servidor, em código, e ela só recebe agregados e no máximo 10 lançamentos.
+- 🔒 **Privacidade como regra:** senha do banco nunca passa pelo Otto, um banco SQLite por usuário, biometria e proteção de tela no app.
+- 👤 **Contas de usuário:** cadastro e login, conexão do banco dentro do app, e exclusão da conta e dos dados quando quiser (LGPD).
+- 🧪 **Modo demonstração:** com `MOCK_MODE=true`, tudo funciona com dados fictícios, sem nenhuma chave.
+- 🔁 **Fallback automático** de provedor de IA (Groq → Gemini → regras locais) e de notificações (push FCM → polling).
+
+### Como funciona
+
+Em 3 passos:
+
+1. **Você cria uma conta** e autoriza o Nubank (Open Finance, só leitura).
+2. **O Otto sincroniza** e avisa a cada movimentação, em segundos.
+3. **Você pergunta** o que quiser sobre a sua conta.
+
+## Estrutura do repositório
+
+```
+server/             API Fastify + SQLite (um banco por usuário), Pluggy, FCM e chat com IA
+app/                app Android (Kotlin + Jetpack Compose, Hilt, Retrofit)
+docs/               logo e banner
+docker-compose.yml  sobe o servidor (e, opcional, um Cloudflare Tunnel)
+.env.example        todas as variáveis do servidor, documentadas
+```
+
+Stack: **servidor** em Node.js 24, TypeScript, Fastify, SQLite (better-sqlite3), Zod e Vitest; **app** em Kotlin, Jetpack Compose (tema próprio preto e branco), Hilt, Retrofit/OkHttp e kotlinx.serialization.
 
 ---
 
@@ -22,9 +73,10 @@
 7. [APK de release assinado](#7-apk-de-release-assinado)
 8. [Backup do SQLite](#8-backup-do-sqlite)
 9. [Testes](#9-testes)
-10. [Diferenças em relação ao briefing (o que a documentação mandou mudar)](#10-diferenças-em-relação-ao-briefing)
+10. [Decisões técnicas](#10-decisões-técnicas)
 11. [Solução de problemas](#11-solução-de-problemas)
 12. [Referência da API](#12-referência-da-api)
+13. [Limitações](#limitações) · [Roadmap](#roadmap) · [Contribuindo](#contribuindo) · [Licença](#licença)
 
 ---
 
@@ -345,11 +397,11 @@ Alertas instantâneos (servidor): provisória entra no saldo e avisa; reenvio n�
 
 ---
 
-## 10. Diferenças em relação ao briefing
+## 10. Decisões técnicas
 
-Itens em que a documentação oficial (consultada em 19/11/2026) mandou fazer diferente:
+Escolhas em que a documentação oficial (consultada em 19/11/2026) levou a fazer diferente do esperado:
 
-| Briefing | Implementado | Motivo |
+| Esperado | Implementado | Motivo |
 |---|---|---|
 | Node.js 20 | **Node.js 24 LTS** | Node 20 saiu de suporte em abr/2026, e `better-sqlite3@13`/`firebase-admin@14` exigem Node ≥ 22. |
 | `GET /transactions` da Pluggy | **`GET /v2/transactions`** (cursor) | O v1 está descontinuado e só funciona até 31/12/2026. Novidades buscadas com `createdAtFrom` (transações novas podem ter data no passado). |
@@ -427,3 +479,34 @@ Rotas públicas: `/health`, `/v1/config`, `/connect`, `/v1/auth/register`, `/v1/
 ### Licenças de terceiros
 
 A fonte **Inter** (© The Inter Project Authors) é distribuída sob a SIL Open Font License 1.1 — cópia em `app/app/src/main/assets/licenses/inter-OFL.txt`.
+
+
+---
+
+## Limitações
+
+- A IA **pode errar** e não substitui contador ou consultor financeiro. O Otto só consulta dados: não faz pagamentos nem transferências e não dá recomendação de investimento.
+- O Open Finance sozinho não é tempo real (os dados do Meu Pluggy renovam a cada 24 h); por isso existem os alertas instantâneos, que dependem do formato das notificações do Nubank e podem precisar de ajuste se ele mudar.
+- Sem HTTPS, senhas e saldos trafegam sem criptografia: use [Cloudflare Tunnel ou Caddy](#6-expor-o-servidor-com-https) antes de expor o servidor.
+- Ainda não há recuperação de senha por e-mail.
+- O plano gratuito da Groq limita tokens por minuto; quando acaba, o Otto troca para o Gemini (se houver chave) ou responde com regras locais.
+
+## Roadmap
+
+- [x] App Android e servidor com chat de IA, alertas e resumo diário
+- [x] Contas de usuário e conexão do Nubank dentro do app
+- [x] Caixinhas e cartão de crédito
+- [ ] Recuperação de senha por e-mail
+- [ ] Renovação do consentimento do Open Finance dentro do app
+- [ ] Suporte a outros bancos além do Nubank
+- [ ] Gráficos por categoria
+
+Tem uma ideia? [Abra uma issue](https://github.com/stumdev/otto/issues/new/choose).
+
+## Contribuindo
+
+Contribuições são bem-vindas! Leia o [guia de contribuição](CONTRIBUTING.md) e o [código de conduta](CODE_OF_CONDUCT.md). Para falhas de segurança, veja a [política de segurança](SECURITY.md).
+
+## Licença
+
+Distribuído sob a licença [MIT](LICENSE).
