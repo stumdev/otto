@@ -4,7 +4,6 @@
 
 <br>
 
-[![CI](https://github.com/stumdev/otto/actions/workflows/ci.yml/badge.svg)](https://github.com/stumdev/otto/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-000000.svg)](LICENSE)
 ![Node](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
