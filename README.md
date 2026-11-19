@@ -46,7 +46,26 @@
 - **Valores sempre em centavos (inteiros).** "Hoje", "semana" (a partir de segunda) e "mês" no fuso `America/Sao_Paulo`, independente do fuso do servidor.
 - **Chat:** streaming por SSE. A IA usa *tool calling* — `get_balance`, `get_period_summary(from,to)`, `get_top_transactions(period,direction,limit)`, `search_transactions(query,period)` — que rodam localmente no SQLite e devolvem só agregados ou no máximo 10 itens. Retry com backoff exponencial e troca de provedor em 429/5xx/erros de rede. Sem chave, um motor de regras responde (saldo, entrou/saiu, maiores saídas, gastos por nome).
 
-> ⚠️ **"Tempo real" depende do agregador.** O Tony notifica no momento em que a Pluggy entrega a transação. Pela documentação da Pluggy, itens de Open Finance são atualizados automaticamente **uma vez por dia**, e no **Meu Pluggy** (o caminho gratuito para uso pessoal) os dados são renovados **a cada 24 h** e não podem ser atualizados manualmente. Ou seja: com Meu Pluggy, um Pix pode levar horas para aparecer. Para latência menor é preciso um plano comercial da Pluggy com atualizações sob demanda (`PATCH /items/{id}`, limitado a 20/min e proibido em lote) — fora do escopo atual.
+> ⚠️ **O Open Finance sozinho não é tempo real.** Pela documentação da Pluggy, itens de Open Finance são atualizados automaticamente **uma vez por dia**, e no **Meu Pluggy** (o caminho gratuito para uso pessoal) os dados são renovados **a cada 24 h** e não podem ser atualizados manualmente. Por isso o Tony tem os **alertas instantâneos** (abaixo), que leem a notificação do próprio app do Nubank no celular.
+
+### Alertas instantâneos (leitura da notificação do Nubank)
+
+```
+ Pix cai ─▶ app do Nubank mostra a notificação ─▶ Tony (no mesmo celular) lê o texto
+          ─▶ extrai valor, entrada/saída, nome e tipo ─▶ POST /v1/events/bank-notification
+          ─▶ servidor grava como PROVISÓRIA (já entra no saldo) e devolve o aviso com saldo
+          ─▶ horas depois a Pluggy entrega a oficial ─▶ casada com a provisória, sem novo aviso
+```
+
+- **Em segundos**, sem senha, sem scraping, sem custo. Só funciona com o app do Nubank instalado **e com as notificações dele ativas** no mesmo celular do Tony.
+- O Tony só lê notificações do pacote `com.nu.production`; todas as outras são descartadas sem leitura do conteúdo. **O texto bruto não sai do aparelho**: ao servidor vão só valor, nome da contraparte, tipo (Pix/TED/débito) e horário, mais uma impressão digital SHA-256 para deduplicar.
+- **Casamento com o Open Finance:** a transação oficial com o **mesmo valor e sinal**, em até **±1 dia**, substitui a provisória (a mais próxima no horário) e **não notifica de novo**. Se a Pluggy entregar antes da notificação, o servidor só vincula. Provisórias nunca confirmadas saem do saldo depois de `PROVISIONAL_TTL_HOURS` (padrão 96 h). Na lista elas aparecem como "· a confirmar".
+- **Servidor fora do ar:** o app mostra o aviso local na hora (sem saldo) e reenvia em segundo plano marcando que já avisou, para não haver aviso duplicado.
+- **O leitor é conservador.** Ele só aceita quando encontra **um** valor em R$ e uma direção inequívoca. Ignora cartão de **crédito**, fatura, Pix agendado, **pedido de Pix**, falha, estorno, caixinhas e similares, que continuam chegando pelo Open Finance.
+
+**Como ativar:** *Ajustes → Alertas instantâneos → Ativar acesso a notificações* e ligue o Tony. No **Android 13+, com o APK instalado fora da Play Store**, a opção aparece bloqueada ("configuração restrita"). Nesse caso, abra *Informações do app* (botão logo abaixo), toque em **⋮ → Permitir configurações restritas**, volte e ative. Alguns fabricantes encerram serviços em segundo plano: tire o Tony da otimização de bateria.
+
+> **Limitação honesta:** o formato das notificações do Nubank não é documentado e pode mudar a qualquer atualização do app dele. As regras foram escritas a partir de formatos plausíveis, **não de capturas reais**. Por isso existe *Ajustes → Alertas instantâneos → Notificações não reconhecidas*, que guarda (cifradas, só no aparelho) as últimas 20 notificações do Nubank com valor em R$ que o leitor ignorou. Se algum Pix ou débito na conta estiver lá, use **Copiar** e acrescente o texto aos testes em `app/app/src/test/java/app/tony/bank/BankNotificationParserTest.kt` para ajustar `BankNotificationParser.kt`. No build debug, *Simular notificação do Nubank* testa o caminho completo sem fazer um Pix.
 
 ---
 
@@ -307,13 +326,15 @@ Os backups contêm seu histórico financeiro: guarde-os cifrados (ex.: `restic`,
 
 ```bash
 cd server
-npm test          # Vitest: 45 testes
+npm test          # Vitest: 55 testes
 npm run typecheck
 ```
 
 Cobrem: formatação de moeda e conversão decimal→centavos; agregação por período e fuso (incl. virada de dia em UTC); série de 7 dias e saldo de fechamento; deduplicação de notificações e de webhooks (`eventId`); texto das notificações; coerência do saldo mock (= soma, nunca negativo, sem duplicar); fallback de provedor de IA com HTTP simulado (retry/backoff em 429, troca para Gemini, 401 não insiste, queda para regras, tool calling com preservação da assinatura do Gemini); limite de itens das ferramentas; motor de regras; assinatura HMAC do webhook; API ponta a ponta (auth, CORS, paginação por cursor, validação, simulate→push, chat SSE); resumo diário no horário de São Paulo.
 
-App: `cd app && ./gradlew lint assembleDebug assembleRelease`.
+App: `cd app && ./gradlew testDebugUnitTest lint assembleDebug assembleRelease` (12 testes do leitor de notificações).
+
+Alertas instantâneos (servidor): provisória entra no saldo e avisa; reenvio não duplica; a oficial da Pluggy substitui a provisória sem novo aviso; Pluggy antes da notificação só vincula; valores diferentes não se confundem; saída grande; `alreadyNotified`; recusa de horário futuro/evento antigo/servidor sem conta; expiração; rota com auth e validação.
 
 ---
 
@@ -329,7 +350,7 @@ Itens em que a documentação oficial (consultada em 19/11/2026) mandou fazer di
 | `EncryptedSharedPreferences` | **Android Keystore direto** (AES-GCM) | A biblioteca `security-crypto` foi descontinuada. |
 | Modelo "Flash vigente" do Gemini | **`gemini-3.8-flash`** | Flash estável atual; `gemini-2.5-flash` foi depreciado. |
 | Groq `openai/gpt-oss-120b` | mantido | Confirmado em produção. |
-| Push "a cada Pix" | depende da Pluggy | Ver o aviso na seção 1: Meu Pluggy atualiza a cada 24 h. |
+| Push "a cada Pix" | **alertas instantâneos** pela leitura da notificação do Nubank + Open Finance para confirmar | Meu Pluggy atualiza a cada 24 h (seção 1). |
 | `targetSdk` atual | **37 (Android 17)**, AGP 9.5.1, Gradle 9.8.1, Kotlin 2.4.21 | Versões estáveis atuais. |
 | Visual de notificação `#141414`, raio 24 | **banner dentro do app** com esse visual; na bandeja, notificação padrão do sistema | O Android não permite estilizar livremente notificações do sistema (cor de fundo/raio são do sistema). |
 | Alerta de saída grande | mesma notificação, com corpo `Saída grande · Pix para … · Saldo …` | Para cumprir "a mesma transação nunca gera duas notificações". |
@@ -351,6 +372,8 @@ Endpoints extras além dos pedidos: `GET /v1/status`, `GET /v1/settings`, `GET /
 | Push FCM não chega | `google-services.json` em `app/app/` e app recompilado; `FIREBASE_SERVICE_ACCOUNT_FILE` apontando para o JSON (log do servidor deve dizer "FCM habilitado"); mesmo projeto Firebase nos dois. |
 | Transações reais não aparecem | `npm run pluggy:check`. Com Meu Pluggy, os dados renovam a cada 24 h. Item em `LOGIN_ERROR`? Renove a autorização (seção 3.1). |
 | Webhooks recusados (401) | Segredos no `.env` iguais aos do Dashboard/`register-webhook`; relógio do servidor sincronizado (NTP) — a assinatura tem tolerância de 5 min. |
+| Alertas instantâneos não chegam | *Ajustes → Alertas instantâneos* diz "Ativo"? Notificações do Nubank ligadas no celular? Veja *Notificações não reconhecidas*: se o Pix está lá, o formato mudou (seção 1). Android 13+ fora da loja: "Permitir configurações restritas". Tire o Tony da otimização de bateria. |
+| Pix aparece duas vezes na lista | Só acontece se o valor oficial for diferente do lido na notificação (o casamento exige o mesmo valor). A provisória expira sozinha em `PROVISIONAL_TTL_HOURS`. |
 | Chat diz "Modo offline" | Nenhuma chave de IA configurada, ou todos os provedores falharam (veja o log `falha no provedor de IA`). |
 | Docker: erro ao compilar `better-sqlite3` | A imagem de build já instala `python3 make g++`; confira se há rede no build. |
 | Não consigo tirar print do app | É o `FLAG_SECURE`. Desligue em *Ajustes → Segurança → Proteger a tela*. |
@@ -369,6 +392,7 @@ Todas as rotas `/v1/*` (exceto o webhook) exigem `Authorization: Bearer <APP_TOK
 | GET | `/v1/transactions?cursor&limit&from&to` | Lista paginada por cursor (datas `AAAA-MM-DD`) |
 | POST | `/v1/sync` | Sincroniza agora (só leitura no agregador) |
 | POST | `/v1/chat` | SSE: eventos `meta`, `delta`, `card`, `error`, `done`. Corpo `{messages:[{role,content}]}` |
+| POST | `/v1/events/bank-notification` | Movimentação lida da notificação do banco: `{fingerprint, amountCents, counterpart?, method?, occurredAt, alreadyNotified?}` → provisória + aviso |
 | POST | `/v1/devices` | `{fid}` — registra o aparelho para push |
 | POST | `/v1/devices/test` | Envia um push de teste |
 | GET | `/v1/notifications?after` | Outbox (fallback local) |

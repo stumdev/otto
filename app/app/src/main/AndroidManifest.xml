@@ -7,6 +7,11 @@
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Só para saber se o app do Nubank está instalado (Android 11+ exige declarar). -->
+    <queries>
+        <package android:name="com.nu.production" />
+    </queries>
+
     <application
         android:name=".TonyApp"
         android:allowBackup="false"
@@ -39,6 +44,18 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Leitura das notificações do app do banco (alertas instantâneos).
+             Só o sistema pode se ligar a este serviço (BIND_NOTIFICATION_LISTENER_SERVICE). -->
+        <service
+            android:name=".bank.BankNotificationListener"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
 

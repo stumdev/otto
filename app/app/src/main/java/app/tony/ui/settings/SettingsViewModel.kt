@@ -14,6 +14,11 @@ import app.tony.data.TonyRepository
 import app.tony.data.userMessage
 import app.tony.notify.Notifications
 import app.tony.notify.PushManager
+import app.tony.bank.BankDiagnostics
+import app.tony.bank.BankEventSender
+import app.tony.bank.BankNotificationListener
+import app.tony.bank.BankNotificationParser
+import app.tony.bank.ParseResult
 import app.tony.security.AppLock
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -38,6 +43,8 @@ data class SettingsState(
     val secureScreen: Boolean = true,
     val pushActive: Boolean = false,
     val fcmInApp: Boolean = false,
+    val listenerEnabled: Boolean = false,
+    val bankAppInstalled: Boolean = true,
 )
 
 @HiltViewModel
@@ -48,6 +55,8 @@ class SettingsViewModel @Inject constructor(
     private val push: PushManager,
     private val lock: AppLock,
     private val chatStore: ChatStore,
+    private val bankSender: BankEventSender,
+    val bankDiagnostics: BankDiagnostics,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsState())
@@ -158,6 +167,38 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             chatStore.clear()
             _messages.tryEmit("Histórico do chat apagado")
+        }
+    }
+
+    /** Chamado ao voltar das configurações do sistema. */
+    fun refreshInstantAlerts() {
+        _state.update {
+            it.copy(
+                listenerEnabled = BankNotificationListener.isEnabled(context),
+                bankAppInstalled = BankNotificationListener.isBankAppInstalled(context),
+            )
+        }
+    }
+
+    fun clearBankDiagnostics() = bankDiagnostics.clear()
+
+    /**
+     * Build debug: passa um texto de exemplo pelo MESMO caminho de uma notificação real
+     * (parser -> servidor -> aviso), para testar sem fazer um Pix.
+     */
+    fun simulateBankNotification() {
+        val title = "Transferência recebida"
+        val text = "Você recebeu uma transferência pelo Pix de R$ 25,00 de Teste da Silva."
+        val r = BankNotificationParser.parse(title, text)
+        if (r !is ParseResult.Parsed) {
+            _messages.tryEmit("O leitor não reconheceu o exemplo")
+            return
+        }
+        val now = System.currentTimeMillis()
+        val fp = BankNotificationListener.fingerprint("simulacao", "sim-$now", now, title, text)
+        viewModelScope.launch {
+            if (bankSender.claim(fp)) bankSender.send(r.event, fp, now)
+            _messages.tryEmit("Leitura simulada enviada")
         }
     }
 

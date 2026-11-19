@@ -20,7 +20,7 @@ export interface TxDto {
 
 export function toTxDto(r: TxRow): TxDto {
   const time = r.has_time ? localTimeOf(r.occurred_at) : null;
-  const pending = r.status === 'PENDING' ? ' · pendente' : '';
+  const pending = r.status === 'PENDING' ? ' · pendente' : r.status === 'PROVISIONAL' ? ' · a confirmar' : '';
   return {
     id: r.id,
     occurredAt: r.occurred_at,

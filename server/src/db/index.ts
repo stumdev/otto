@@ -74,6 +74,14 @@ const MIGRATIONS: string[] = [
     value TEXT NOT NULL
   );
   `,
+  // 2 — transações provisórias vindas da notificação do app do banco no celular.
+  //     status = 'PROVISIONAL' até a Pluggy entregar a transação oficial.
+  //     source_fingerprint liga a notificação à transação (provisória ou oficial que a substituiu).
+  `
+  ALTER TABLE transactions ADD COLUMN source_fingerprint TEXT;
+  CREATE INDEX idx_tx_fingerprint ON transactions(source_fingerprint);
+  CREATE INDEX idx_tx_status ON transactions(status, deleted);
+  `,
 ];
 
 export function openDatabase(path: string): DB {

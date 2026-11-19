@@ -36,6 +36,8 @@ const EnvSchema = z.object({
 
   SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(120).default(5),
   NOTIFY_MAX_AGE_HOURS: z.coerce.number().int().min(1).max(24 * 30).default(72),
+  /** Provisórias (lidas da notificação do banco) não confirmadas pelo agregador saem do saldo após este prazo. */
+  PROVISIONAL_TTL_HOURS: z.coerce.number().int().min(6).max(24 * 14).default(96),
 
   // Firebase Cloud Messaging
   FIREBASE_SERVICE_ACCOUNT_FILE: optStr,

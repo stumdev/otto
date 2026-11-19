@@ -28,6 +28,7 @@ export interface TxRow {
   method: string | null;
   category: string | null;
   status: string;
+  source_fingerprint: string | null;
 }
 
 export interface AccountRow {
@@ -58,11 +59,86 @@ export function listAccounts(db: DB): AccountRow[] {
   return db.prepare('SELECT * FROM accounts ORDER BY id').all() as AccountRow[];
 }
 
-export function totalBalance(db: DB): { balanceCents: number; updatedAt: string | null } {
+export const PROVISIONAL = 'PROVISIONAL';
+
+/**
+ * Saldo = saldo informado pelas contas + transações provisórias ainda não confirmadas.
+ * (O saldo da conta vem do agregador e só passa a incluir uma transação quando ela é
+ * entregue; até lá, a provisória lida da notificação do banco cobre a diferença.)
+ */
+export function totalBalance(db: DB): { balanceCents: number; updatedAt: string | null; provisionalCents: number } {
   const row = db
-    .prepare('SELECT COALESCE(SUM(balance_cents), 0) AS b, MAX(updated_at) AS u FROM accounts')
-    .get() as { b: number; u: string | null };
-  return { balanceCents: row.b, updatedAt: row.u };
+    .prepare(
+      `SELECT
+         (SELECT COALESCE(SUM(balance_cents), 0) FROM accounts) AS b,
+         (SELECT COALESCE(SUM(amount_cents), 0) FROM transactions WHERE status = '${PROVISIONAL}' AND deleted = 0) AS p,
+         (SELECT MAX(updated_at) FROM accounts) AS u`,
+    )
+    .get() as { b: number; p: number; u: string | null };
+  return { balanceCents: row.b + row.p, updatedAt: row.u, provisionalCents: row.p };
+}
+
+/** Provisória com o mesmo valor (e sinal) em até ±1 dia da data informada, a mais próxima no tempo. */
+export function findProvisionalMatch(
+  db: DB,
+  amountCents: number,
+  fromDate: string,
+  toDate: string,
+  occurredAt: string,
+): TxRow | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM transactions
+       WHERE status = '${PROVISIONAL}' AND deleted = 0 AND amount_cents = ? AND local_date BETWEEN ? AND ?
+       ORDER BY ABS(julianday(occurred_at) - julianday(?)) ASC, id ASC LIMIT 1`,
+    )
+    .get(amountCents, fromDate, toDate, occurredAt) as TxRow | undefined;
+}
+
+/**
+ * Transação oficial (não provisória) ainda não vinculada a nenhuma notificação, com o mesmo
+ * valor em até ±1 dia e gravada recentemente. Usada quando o agregador entrega antes da notificação.
+ */
+export function findUnclaimedOfficial(
+  db: DB,
+  amountCents: number,
+  fromDate: string,
+  toDate: string,
+  occurredAt: string,
+  createdAfterIso: string,
+): TxRow | undefined {
+  return db
+    .prepare(
+      `SELECT * FROM transactions
+       WHERE status <> '${PROVISIONAL}' AND deleted = 0 AND source_fingerprint IS NULL
+         AND amount_cents = ? AND local_date BETWEEN ? AND ? AND created_at >= ?
+       ORDER BY ABS(julianday(occurred_at) - julianday(?)) ASC, id ASC LIMIT 1`,
+    )
+    .get(amountCents, fromDate, toDate, createdAfterIso, occurredAt) as TxRow | undefined;
+}
+
+export function findByFingerprint(db: DB, fingerprint: string): TxRow | undefined {
+  return db
+    .prepare('SELECT * FROM transactions WHERE source_fingerprint = ? ORDER BY id LIMIT 1')
+    .get(fingerprint) as TxRow | undefined;
+}
+
+export function setFingerprint(db: DB, id: number, fingerprint: string): void {
+  db.prepare('UPDATE transactions SET source_fingerprint = ? WHERE id = ?').run(fingerprint, id);
+}
+
+export function deleteTransactionRow(db: DB, id: number): void {
+  db.prepare('DELETE FROM transactions WHERE id = ?').run(id);
+}
+
+/** Provisórias nunca confirmadas pelo agregador saem do saldo depois do prazo. */
+export function expireProvisionals(db: DB, createdBeforeIso: string, nowIso: string): number {
+  return db
+    .prepare(
+      `UPDATE transactions SET deleted = 1, updated_at = ?
+       WHERE status = '${PROVISIONAL}' AND deleted = 0 AND created_at < ?`,
+    )
+    .run(nowIso, createdBeforeIso).changes;
 }
 
 export function adjustBalance(db: DB, accountId: string, deltaCents: number, nowIso: string): void {
