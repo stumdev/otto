@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="tony_black">#FF000000</color>
+    <color name="tony_white">#FFFAFAFA</color>
+    <color name="tony_launcher_bg">#FFFFFFFF</color>
+</resources>

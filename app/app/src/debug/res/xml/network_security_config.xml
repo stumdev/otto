@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SOMENTE NO BUILD DEBUG: permite HTTP para o emulador (10.0.2.2), localhost e IPs da rede
+  local, para testar com o servidor mock. O build release usa a config de src/main (só HTTPS).
+  Endereços IP de rede local não podem ser listados por faixa aqui, por isso o debug libera
+  HTTP de forma geral; o app ainda recusa http:// em release na tela de configuração.
+-->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
